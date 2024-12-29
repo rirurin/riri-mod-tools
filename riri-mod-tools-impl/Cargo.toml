@@ -1,0 +1,12 @@
+[package]
+name = "riri-mod-tools-impl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file.workspace = true
+
+[dependencies]
+# enum_delegate = "0.2"
+proc-macro2 = { version = "1.0" }
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"

@@ -1,0 +1,15 @@
+[workspace]
+
+members = [ 
+    "riri-mod-tools",
+    "riri-mod-tools-impl",
+    "riri-mod-tools-proc",
+    "riri-mod-tools-rt"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = [ "Rirurin" ]
+license-file = "LICENSE"
