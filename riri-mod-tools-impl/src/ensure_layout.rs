@@ -65,7 +65,10 @@ impl EnsureLayout {
                 let p_i = p.path.get_ident().unwrap();
                 quote! { ::core::mem::size_of::<#p_i>() }
             },
-            syn::Type::Ptr(p) => {
+            syn::Type::Ptr(_p) => {
+                // this will always be usize
+                quote! { ::core::mem::size_of::<usize>() }
+                /*
                 let p_p = if let Some(v) = &p.const_token {
                     quote! { *#v }
                 } else if let Some(v) = &p.mutability {
@@ -75,6 +78,7 @@ impl EnsureLayout {
                 };
                 let p_ty = EnsureLayout::build_type_fragment(&p.elem);
                 quote! { ::core::mem::size_of::<#p_p #p_ty>() }
+                */
             },
             syn::Type::Array(p) => {
                 let p_l = p.len.to_token_stream();
@@ -94,28 +98,19 @@ impl EnsureLayout {
             return Err(syn::Error::new(attr.span(), "field_offset is formatted incorrectly"))
         }
     }
-    // We are somewhat limited in how flexible this attribute can be since Rust doesn't have type
-    // reflection. The first field is allowed to not include a field_offset defintion since we know
-    // we're starting at 0, but after that, there's no mechanism to get type information such as
-    // size.
-    //
-    fn visit_annotated_struct(&self, i: &mut syn::ItemStruct) -> syn::Result<TokenStream2> {
-        let fields_named = match &mut i.fields {
-            syn::Fields::Named(n) => n,
-            syn::Fields::Unnamed(_) => return Err(syn::Error::new(i.span(), "Structs with unnamed fields are not currently supported")),
-            syn::Fields::Unit => return Err(syn::Error::new(i.span(), "Unit structs are not supported"))
-        };
-        fn get_pad_tokens(tk: &Option<TokenStream2>, id: usize, d_ofs: usize, ofs: usize) -> Option<TokenStream2> {
-            let field_name = format_ident!("__riri_ensure_layout_pad{}", id);
-            if let Some(t_ty) = tk {
-                Some(quote! { #[doc(hidden)] #field_name: [u8; #d_ofs - #t_ty] })
-            } else if ofs > 0 {
-                Some(quote! { #[doc(hidden)] #field_name: [u8; #d_ofs] })
-            } else {
-                None
-            }
-        }
 
+    fn get_pad_tokens(tk: &Option<TokenStream2>, id: usize, d_ofs: usize, ofs: usize) -> Option<TokenStream2> {
+        let field_name = format_ident!("__riri_ensure_layout_pad{}", id);
+        if let Some(t_ty) = tk {
+            Some(quote! { #[doc(hidden)] #field_name: [u8; #d_ofs - #t_ty] })
+        } else if ofs > 0 {
+            Some(quote! { #[doc(hidden)] #field_name: [u8; #d_ofs] })
+        } else {
+            None
+        }
+    }
+
+    fn create_padding_fields(&self, fields_named: &mut syn::FieldsNamed) -> syn::Result<()> {
         let mut ofs: usize = 0;
         let mut pads: Vec<TokenStream2> = vec![];
         let mut type_tokens: Option<TokenStream2> = None;
@@ -135,6 +130,7 @@ impl EnsureLayout {
             // after this since we don't know the size of any types (there is no type reflection)
             if attrs.len() == 1 {
                 let f_ofs = Self::get_field_offset(&attrs[0])?;
+                // println!("{}: 0x{:x}", field.ident.as_ref().unwrap().to_string(), f_ofs);
                 /*
                 let f_ofs = if let syn::Meta::List(l_ofs) = &attrs[0].meta {
                     let t_ofs = syn::parse2::<syn::LitInt>(l_ofs.tokens.clone())?;
@@ -146,7 +142,7 @@ impl EnsureLayout {
                     return Err(syn::Error::new(field.span(), "field_offset should be larger than the field above"));
                 }
                 // add padding
-                if let Some(p) = get_pad_tokens(&type_tokens, pads.len(), f_ofs - ofs, f_ofs) {
+                if let Some(p) = Self::get_pad_tokens(&type_tokens, pads.len(), f_ofs - ofs, f_ofs) {
                     pads.push(p);
                 }
                 // set prev field state
@@ -167,16 +163,42 @@ impl EnsureLayout {
                 pad = pads.pop();
                 p_i += 1;
             }
-        }
-        
+        } 
         // add padding at the end if we aren't equal to size
         if ofs < self.size.unwrap() {
             fields_named.named.push(
                 syn::Field::parse_named.parse2(
-                    get_pad_tokens(&type_tokens, end_pad_id, self.size.unwrap() - ofs, ofs).unwrap()
+                    Self::get_pad_tokens(&type_tokens, end_pad_id, self.size.unwrap() - ofs, ofs).unwrap()
                 )?
             );
-        } 
+        }
+        Ok(())
+    }
+
+    fn create_zero_field_struct(&self, i: &mut syn::FieldsNamed) -> syn::Result<()> {
+        let pad_token = Self::get_pad_tokens(&None, 0, self.size.unwrap(), self.size.unwrap()).unwrap();
+        i.named.push(syn::Field::parse_named.parse2(pad_token)?);
+        Ok(())
+    }
+
+    // We are somewhat limited in how flexible this attribute can be since Rust doesn't have type
+    // reflection. The first field is allowed to not include a field_offset defintion since we know
+    // we're starting at 0, but after that, there's no mechanism to get type information such as
+    // size.
+    //
+    fn visit_annotated_struct(&self, i: &mut syn::ItemStruct) -> syn::Result<TokenStream2> {
+        let fields_named = match &mut i.fields {
+            syn::Fields::Named(n) => n,
+            syn::Fields::Unnamed(_) => return Err(syn::Error::new(i.span(), "Structs with unnamed fields are not currently supported")),
+            syn::Fields::Unit => return Err(syn::Error::new(i.span(), "Unit structs are not supported"))
+        };
+        
+        if fields_named.named.len() > 0 {
+            self.create_padding_fields(fields_named)?;
+        } else {
+            self.create_zero_field_struct(fields_named)?;
+        }
+
         // TODO: Add explicit align into repr
         let c_rep = syn::Attribute::parse_outer.parse2(quote!{ #[repr(C)] })?;
         i.attrs.push(c_rep[0].clone());
