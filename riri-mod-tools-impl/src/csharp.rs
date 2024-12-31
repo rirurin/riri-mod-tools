@@ -1,7 +1,4 @@
-#![allow(dead_code, unused_imports, unused_mut, unused_variables)]
-use std::{
-    borrow::{ Borrow, BorrowMut },
-};
+use std::borrow::Borrow;
 use syn::spanned::Spanned;
 
 pub struct Utils;

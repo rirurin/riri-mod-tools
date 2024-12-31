@@ -102,3 +102,34 @@ impl SourceWriter {
     }
     pub fn submit(self) -> String { self.buffer }
 }
+
+#[derive(Debug)]
+pub struct GetGenericTypeError;
+impl Error for GetGenericTypeError { }
+impl std::fmt::Display for GetGenericTypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error trying to obtain inner type")
+    }
+}
+
+// Get the inner type from a type with a generic. Hooked statics generate a
+// std::sync::OnceLock<T> -> T, and we're trying to obtain T.
+pub(crate) fn generic_type_get_inner(outer: &syn::Type) -> Result<Option<&syn::Type>, Box<dyn Error>> {
+    if let syn::Type::Path(p) = outer {
+        // check last part of tail, since we expect the type argument to be here
+        // NOTE: We're not expecting fully qualified paths here!
+        // Also, the inner generic should only define one type!
+        let path_tail = p.path.segments.last().unwrap();
+        match &path_tail.arguments {
+            syn::PathArguments::AngleBracketed(a) => {
+                match a.args.first().unwrap() {
+                    syn::GenericArgument::Type(t) => Ok(Some(t)),
+                    _ => Err(Box::new(GetGenericTypeError))
+                }
+            },
+            _ => Ok(None)
+        }
+    } else {
+        Err(Box::new(GetGenericTypeError))
+    }
+}

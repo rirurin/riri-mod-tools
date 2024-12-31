@@ -115,7 +115,6 @@ pub fn riri_hook_fn_impl(input: TokenStream2, annotated_item: TokenStream2) -> T
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    // transformer.codegen_external(&mut target);
     transformed
 }
 
@@ -192,7 +191,6 @@ pub fn riri_hook_static_impl(input: TokenStream2, annotated_item: TokenStream2) 
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    transformer.codegen_external(&mut target);
     transformed
 }
 struct HookStaticBuildScriptItems {
@@ -247,7 +245,6 @@ pub fn cpp_class_impl(input: TokenStream2, annotated_item: TokenStream2) -> Toke
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    // target.parse_attribute_tokens(input);
     transformed
 }
 

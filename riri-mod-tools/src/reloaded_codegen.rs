@@ -7,7 +7,6 @@ use handlebars::Handlebars;
 use std::{
     error::Error, fs::{ self, Metadata }, io::Write, path::{ Path, PathBuf }, time::SystemTime
 };
-
 use twox_hash::XxHash3_64;
 use walkdir::{ DirEntry, WalkDir };
 
@@ -101,7 +100,7 @@ impl SourceFileEvaluationResult {
     }
 }
 
-pub struct HookBootstrapClassData {
+pub struct HookBootstrapFunctionState {
     fn_name: String,
     delegate_path: String,
     fn_path: std::ptr::NonNull<str>,
@@ -109,9 +108,9 @@ pub struct HookBootstrapClassData {
     _pinned: std::marker::PhantomPinned
 }
 
-impl HookBootstrapClassData {
+impl HookBootstrapFunctionState {
     fn new(fn_name: String, delegate_path: String) -> std::pin::Pin<Box<Self>> {
-        let mut new = Box::new(HookBootstrapClassData {
+        let mut new = Box::new(HookBootstrapFunctionState {
             fn_name, delegate_path,
             fn_path: std::ptr::NonNull::from(""),
             class_path: std::ptr::NonNull::from(""),
@@ -129,12 +128,28 @@ impl HookBootstrapClassData {
     fn get_class_path(&self) -> &str { unsafe { self.class_path.as_ref() } }
 }
 
+pub struct HookBootstrapStaticState {
+    static_type: String,
+    static_name: String
+}
+
+impl HookBootstrapStaticState {
+    fn new(static_type: String, static_name: String) -> Self {
+        Self { static_type, static_name }
+    }
+}
+
+pub struct HookBootstrapClassState;
+
 trait HookAssignCodegen {
     fn make_single_function_hook_assign<P: AsRef<Path>>(
         &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass, 
-        class: &HookBootstrapClassData, delegate_type: &str) 
+        class: &HookBootstrapFunctionState, delegate_type: &str) 
         -> Result<String, Box<dyn Error>>;
-    // fn make_single_static_hook_assign();
+    fn make_single_static_hook_assign<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
+        state: &HookBootstrapStaticState
+    ) -> Result<String, Box<dyn Error>>;
     // fn make_single_class_hook_assign();
 }
 
@@ -166,7 +181,7 @@ struct HookAssignCodegenStaticOffset(riri_mod_tools_impl::hook_parse::StaticOffs
 impl HookAssignCodegen for HookAssignCodegenStaticOffset {
     fn make_single_function_hook_assign<P: AsRef<Path>>(
         &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
-        class: &HookBootstrapClassData, delegate_type: &str
+        class: &HookBootstrapFunctionState, delegate_type: &str
         ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         let mut hook_assign = String::new();
@@ -174,11 +189,27 @@ impl HookAssignCodegen for HookAssignCodegenStaticOffset {
             get_resolve_function_path(&None, &evaluator.ffi_utility_class(), &hooks_class)));
         hook_assign.push_str(&format!("            _{} = _hooks!.CreateHook<{}>({}, addr).Activate();\n",
             class.get_fn_name(), class.get_delegate_path(), class.get_fn_path()));
-        hook_assign.push_str(&format!("            {}.{}({})_{}.OriginalFunctionWrapperAddress);\n",
+        hook_assign.push_str(&format!("            {}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
           &ffi.csharp_class_name(), 
           &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&class.get_fn_name().to_ascii_uppercase()),
           delegate_type,
           class.get_fn_name()));
+        Ok(hook_assign)
+    }
+    fn make_single_static_hook_assign<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
+        state: &HookBootstrapStaticState
+        ) -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        let mut hook_assign = String::new();
+        hook_assign.push_str(&format!("var addr = {}\n",
+            get_resolve_function_path(&None, &evaluator.ffi_utility_class(), &hooks_class)));  
+        hook_assign.push_str(&format!("{}.{}.{}(({})addr);\n", 
+            &evaluator.ffi_hook_namespace(),
+            &ffi.csharp_class_name(),
+            &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&state.static_name), 
+            &state.static_type
+        ));
         Ok(hook_assign)
     }
 }
@@ -190,7 +221,7 @@ struct HookAssignCodegenDynamicOffset<'a>(&'a riri_mod_tools_impl::hook_parse::D
 impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffset<'a> {
     fn make_single_function_hook_assign<P: AsRef<Path>>(
         &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
-        class: &HookBootstrapClassData, delegate_type: &str
+        class: &HookBootstrapFunctionState, delegate_type: &str
         ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         let mut hook_assign = String::new();
@@ -211,6 +242,26 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffset<'a> {
         hook_assign.push_str("            \x7d);\n");
         Ok(hook_assign)
     }
+    fn make_single_static_hook_assign<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
+        state: &HookBootstrapStaticState
+        ) -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        let mut hook_assign = String::new();
+        hook_assign.push_str(&format!("SigScan(\"{}\", \"{}\", x => ",
+            self.0.sig, &state.static_name.to_ascii_lowercase()));
+        hook_assign.push_str("\x7b\n");
+        hook_assign.push_str(&format!("                var addr = {}\n",
+            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));  
+        hook_assign.push_str(&format!("                {}.{}.{}(({})addr);\n",
+            &evaluator.ffi_hook_namespace(),
+            &ffi.csharp_class_name(),
+            &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&state.static_name), 
+            &state.static_type
+        ));
+        hook_assign.push_str("            \x7d);\n");
+        Ok(hook_assign)
+    }
 }
 impl<'a> HookAssignCodegenDynamicOffset<'a> {
     fn new(parm: &'a riri_mod_tools_impl::hook_parse::DynamicOffset) -> Self { Self(parm) }
@@ -220,16 +271,16 @@ struct HookAssignCodegenDynamicOffsetSharedScans<'a>(&'a riri_mod_tools_impl::ho
 impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffsetSharedScans<'a> {
     fn make_single_function_hook_assign<P: AsRef<Path>>(
         &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
-        class: &HookBootstrapClassData, delegate_type: &str
+        class: &HookBootstrapFunctionState, delegate_type: &str
         ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         let shared_scan_state = self.0.shared_scan.unwrap();
         let mut hook_assign = String::new();
         if shared_scan_state == riri_mod_tools_impl::hook_parse::RyoTuneSharedScan::Produce {
-            hook_assign.push_str(&format!("_sharedScan.AddScan<{}>({});",
+            hook_assign.push_str(&format!("_sharedScan.AddScan<{}>({});\n",
                 class.get_delegate_path(), self.0.sig));
         }
-        hook_assign.push_str(&format!("_sharedScan.CreateListener<{}>(x => )",
+        hook_assign.push_str(&format!("_sharedScan.CreateListener<{}>(x => ",
             class.get_delegate_path()));
 
         hook_assign.push_str("\x7b\n");
@@ -237,11 +288,36 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffsetSharedScans<'a> {
             get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));
         hook_assign.push_str(&format!("                _{} = _hooks!.CreateHook<{}>({}, addr).Activate();\n",
             class.get_fn_name(), class.get_delegate_path(), class.get_fn_path()));
-        hook_assign.push_str(&format!("                {}.{}({})_{}.OriginalFunctionWrapperAddress);\n",
+        hook_assign.push_str(&format!("                {}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
           class.get_class_path(), 
           &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&class.get_fn_name().to_ascii_uppercase()),
           delegate_type,
           class.get_fn_name()
+        ));
+        hook_assign.push_str("            \x7d);\n");
+        Ok(hook_assign)
+    }
+    fn make_single_static_hook_assign<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
+        state: &HookBootstrapStaticState
+        ) -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        let shared_scan_state = self.0.shared_scan.unwrap();
+        let mut hook_assign = String::new();
+        if shared_scan_state == riri_mod_tools_impl::hook_parse::RyoTuneSharedScan::Produce {
+            hook_assign.push_str(&format!("_sharedScan.AddScan(\"{}\", {});\n",
+                &state.static_name, self.0.sig));
+        }
+        hook_assign.push_str(&format!("_sharedScan.CreateListener(\"{}\", x => ",
+            &state.static_name));
+        hook_assign.push_str("\x7b\n");
+        hook_assign.push_str(&format!("                var addr = {}\n",
+            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));  
+        hook_assign.push_str(&format!("                {}.{}.{}(({})addr);\n",
+            &evaluator.ffi_hook_namespace(),
+            &ffi.csharp_class_name(),
+            &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&state.static_name), 
+            &state.static_type
         ));
         hook_assign.push_str("            \x7d);\n");
         Ok(hook_assign)
@@ -330,6 +406,7 @@ where P: AsRef<Path>
                 syn::Item::Fn(f) => {
                     let fn_attr_pos = f.attrs.iter().position(|f| f.path().is_ident("riri_hook_fn"));
                     if let Some(p) = fn_attr_pos {
+                        println!("function: {}", f.sig.ident.to_string());
                         let insertion = riri_mod_tools_impl::riri_hook::riri_hook_fn_build(
                             f.attrs.remove(p).meta.require_list()?.tokens.clone(),
                             f.clone()
@@ -340,26 +417,37 @@ where P: AsRef<Path>
                 syn::Item::Macro(m) => {
                     let fn_attr_pos = m.attrs.iter().position(|f| f.path().is_ident("riri_hook_static"));
                     if let Some(p) = fn_attr_pos {
+                        println!("static: {}", m.mac.path.get_ident().unwrap().to_string());
                         let insertion = riri_mod_tools_impl::riri_hook::riri_hook_static_build(
                             m.attrs.remove(p).meta.require_list()?.tokens.clone(),
                             m.clone()
                         )?;
                         mutated_items.push((i, insertion));
                     }
-                }, 
+                },
                 _ => continue
             }
         }
         let mut items: SourceFileEvaluationParamMap = std::collections::HashMap::new();
         // Attach mutated items
+        let mut added_items = 0;
         for mutated_item in &mut mutated_items {
-            // items.insert(mutated_item.1.name, mutated_item.1.args);
-            src_syntax.items[mutated_item.0] = mutated_item.1.items.remove(0);
-            if mutated_item.1.items.len() > 1 { 
+            src_syntax.items[mutated_item.0 + added_items] = mutated_item.1.items.remove(0);
+            if mutated_item.1.items.len() > 0 { 
                 src_syntax.items.extend_from_slice(mutated_item.1.items.as_slice());
-                src_syntax.items[mutated_item.0+1..].rotate_right(mutated_item.1.items.len());
+                src_syntax.items[mutated_item.0 + added_items + 1..].rotate_right(mutated_item.1.items.len());
+                added_items += mutated_item.1.items.len();
             }
         }
+        /*
+        for src_item in &src_syntax.items {
+            match src_item {
+                syn::Item::Fn(f) => println!("{}", f.to_token_stream().to_string()),
+                syn::Item::Static(f) => println!("{}", f.to_token_stream().to_string()),
+                _ => continue
+            };
+        }
+        */
         // Move name and args to evaluation result
         for mutated_item in mutated_items {
             items.insert(mutated_item.1.name, mutated_item.1.args);
@@ -381,9 +469,9 @@ where P: AsRef<Path>
             match item {
                 syn::Item::Fn(f) => {
                     let fn_name = f.sig.ident.to_string();
+                    // println!("Found function: {}", &fn_name);
                     let hook_parm = match ffi.eval.params.get(&fn_name) {
                         Some(v) => v,
-                        // None => return Err(Box::new(MacroParseError(format!("Could not find matching parameter for function {}", fn_name))))
                         None => continue
                     };
                     let delegate_path = format!("{}.{}.{}Delegate", &self.ffi_hook_namespace(), &ffi.csharp_class_name(), &fn_name);
@@ -391,7 +479,7 @@ where P: AsRef<Path>
                     if hook_parm.0.len() > 1 {
                         todo!("Multiple hook entries TODO!");
                     }
-                    println!("type: {:?}", f.sig);
+                    // println!("type: {:?}", f.sig);
                     // Create a delegate type to cast the function pointer
                     // f.sig.output
                     let mut delegate_type = "delegate* unmanaged[Stdcall]<".to_owned();
@@ -405,10 +493,10 @@ where P: AsRef<Path>
                         syn::ReturnType::Type(_, t) => delegate_type.push_str(&riri_mod_tools_impl::csharp::Utils::to_csharp_typename(&t)?)
                     };
                     delegate_type.push_str(">");
-                    let class_data = HookBootstrapClassData::new(fn_name, delegate_path);
+                    let class_data = HookBootstrapFunctionState::new(fn_name, delegate_path);
                     hook_decl.push_str(&format!("private Reloaded.Hooks.Definitions.IHook<{}>? _{};\n", 
                         class_data.get_delegate_path(), class_data.get_fn_name()));
-                    hook_assign = match &hook_parm.0[0] {
+                    hook_assign.push_str(&match &hook_parm.0[0] {
                         riri_mod_tools_impl::hook_parse::HookEntry::Static(s) => {
                             let res = HookAssignCodegenStaticOffset::new(*s);
                             res.make_single_function_hook_assign(self, ffi, &class_data, &delegate_type)?
@@ -426,10 +514,47 @@ where P: AsRef<Path>
                                 }
                             }
                         }
-                    };
+                    });
+                    hook_assign.push_str("            ");
                 },
                 syn::Item::Static(s) => {
-
+                    let static_name = s.ident.to_string();
+                    let hook_parm = match ffi.eval.params.get(&static_name) {
+                        Some(v) => v,
+                        None => continue
+                    };
+                    // println!("Added static! {}", &static_name);
+                    if hook_parm.0.len() > 1 {
+                        todo!("Multiple hook entries todo!");
+                    }
+                    let inner_type = match crate::utils::generic_type_get_inner(&s.ty)? {
+                        Some(t) => t,
+                        None => return Err(Box::new(MacroParseError("No generic argument was found".to_owned())))
+                    };
+                    let static_builder = HookBootstrapStaticState::new(
+                        riri_mod_tools_impl::csharp::Utils::to_csharp_typename(&inner_type)?, 
+                        static_name
+                    );
+                    hook_assign.push_str(&match &hook_parm.0[0] {
+                        riri_mod_tools_impl::hook_parse::HookEntry::Static(s) => {
+                            let res = HookAssignCodegenStaticOffset::new(*s);
+                            res.make_single_static_hook_assign(self, ffi, &static_builder)?
+                        },
+                        riri_mod_tools_impl::hook_parse::HookEntry::Dyn(d) => {
+                            match d.shared_scan {
+                                Some(_) => {
+                                    self.uses_shared_scans = true;
+                                    let res = HookAssignCodegenDynamicOffsetSharedScans::new(d);
+                                    res.make_single_static_hook_assign(self, ffi, &static_builder)?
+                                },
+                                None => {
+                                    let res = HookAssignCodegenDynamicOffset::new(d);
+                                    res.make_single_static_hook_assign(self, ffi, &static_builder)?
+                                }
+                            }
+                        }
+                    });
+                    hook_assign.push_str("            ");
                 },
                 _ => continue
             };

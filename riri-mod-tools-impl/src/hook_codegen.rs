@@ -42,24 +42,6 @@ pub(crate) trait HookFramework {
             HookItemType::CppClass(c) => self.codegen_rust_class(c)
         }
     }
-
-    fn set_external_environment(&mut self) -> bool;
-
-    fn codegen_external_function(&mut self, f: &mut syn::ItemFn); 
-    fn codegen_external_static(&mut self, s: &mut StaticVarHook); 
-    fn codegen_external_class(&mut self, c: &mut syn::ItemStruct);
-    fn codegen_external(&mut self, h: &mut HookItemType) {
-        match self.set_external_environment() {
-            true => {
-                match h {
-                    HookItemType::Function(f) => self.codegen_external_function(f),
-                    HookItemType::Static(s) => self.codegen_external_static(s),
-                    HookItemType::CppClass(c) => self.codegen_external_class(c)
-                }
-            },
-            false => return
-        }
-    }
 }
 
 pub fn make_dummy_item() -> syn::Item {
@@ -263,38 +245,6 @@ impl HookFramework for Reloaded2CSharpHook {
         }) 
         // check functions inside of struct to check if they are associated with a vtable entry
         // hook each associated function, like in function codegen
-    }
-    fn codegen_external_function(&mut self, f: &mut syn::ItemFn) {
-        // bind original function handler (raw function pointer or 
-        // Reloaded-II OriginalFunction)
-        // (Rust function from C#)
-        // todo!()
-        // bind function hook (called from Reloaded2's Mod class ctor)
-        // (C# only)
-        //
-        // [[HOOK]]
-        // _sigscan("48 89 ...", Reloaded2Interop.GetDirectAddress, 
-        // x => { 
-        //      _samplehook = _hooks.CreateHook<SampleHook>(Reloaded2Interop.SampleHook, x).Activate());
-        //      Reloaded2Interop.SetSampleHook(_samplehook.OriginalFunctionWrapperAddress);
-        // } 
-    }
-    fn codegen_external_static(&mut self, s: &mut StaticVarHook) {
-        // todo!()
-    }
-    fn codegen_external_class(&mut self, c: &mut syn::ItemStruct) {
-        // todo!()
-    }
-    fn set_external_environment(&mut self) -> bool {
-        match var_os("RIRI_HOOK_TARGET_DIR") {
-            Some(v) => {
-                self.r2_hooks_path.write(Box::new(v.into()));
-                let r2_hooks_path_val = unsafe { self.r2_hooks_path.assume_init_ref().as_path() };
-                println!("codegen hook path: {}", r2_hooks_path_val.as_os_str().to_str().unwrap());
-            },
-            None => return false
-        }
-        true
     } 
 }
 
