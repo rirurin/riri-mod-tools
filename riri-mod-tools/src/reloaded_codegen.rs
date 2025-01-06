@@ -153,12 +153,16 @@ trait HookAssignCodegen {
     // fn make_single_class_hook_assign();
 }
 
-fn get_resolve_function_path(fn_name: &Option<String>, util_namespace: &str, hook_namespace: &str) -> String {
+fn get_resolve_function_path(fn_name: &Option<String>, util_namespace: &str, hook_namespace: &str, input_value: Option<String>) -> String {
     // TODO: Try to decouple this. This currently *has* to stay in sync with extern methods defined
     // in riri-mod-tools-rt so we can generate the right path in codegen (builtins go into the
     // ReloadedFFI.Utilites namespace, while anything else goes into the hook class's namespace.
     // This sucks.)
-    fn get_resolve_function_path_inner(fn_name: &str, util_namespace: &str, hook_namespace: &str) -> String {
+    fn get_resolve_function_path_inner(fn_name: &str, util_namespace: &str, hook_namespace: &str, input_value: Option<String>) -> String {
+        let inner_value = match input_value {
+            Some(v) => v,
+            None => "x".to_owned()
+        };
         match fn_name {
             "get_address" |
             "get_address_may_thunk" |
@@ -166,14 +170,14 @@ fn get_resolve_function_path(fn_name: &Option<String>, util_namespace: &str, hoo
             "get_indirect_address_short2" |
             "get_indirect_address_long" |
             "get_indirect_address_long4" => {
-                format!("{}.{}(x);", util_namespace, fn_name)
+                format!("{}.{}({});", util_namespace, fn_name, inner_value)
             },
-            _ => format!("{}.{}(x);", hook_namespace, fn_name)
+            _ => format!("{}.{}({});", hook_namespace, fn_name, inner_value)
         }
     }
     match fn_name {
-        Some(v) => get_resolve_function_path_inner(v.as_str(), util_namespace, hook_namespace),
-        None => get_resolve_function_path_inner("get_address_may_thunk", util_namespace, hook_namespace)
+        Some(v) => get_resolve_function_path_inner(v.as_str(), util_namespace, hook_namespace, input_value),
+        None => get_resolve_function_path_inner("get_address_may_thunk", util_namespace, hook_namespace, input_value)
     } 
 }
 
@@ -185,11 +189,16 @@ impl HookAssignCodegen for HookAssignCodegenStaticOffset {
         ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         let mut hook_assign = String::new();
-        hook_assign.push_str(&format!("var addr = {}\n",
-            get_resolve_function_path(&None, &evaluator.ffi_utility_class(), &hooks_class)));
-        hook_assign.push_str(&format!("            _{} = _hooks!.CreateHook<{}>({}, addr).Activate();\n",
-            class.get_fn_name(), class.get_delegate_path(), class.get_fn_path()));
-        hook_assign.push_str(&format!("            {}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
+        hook_assign.push_str(&format!("var addr_{} = {}\n",
+            &class.get_fn_name(),
+            get_resolve_function_path(
+                &None, &evaluator.ffi_utility_class(), 
+                &hooks_class, Some(format!("0x{:x}", self.0.0))
+        )));
+        hook_assign.push_str(&format!("            _{} = _hooks!.CreateHook<{}>({}, (long)addr_{}).Activate();\n",
+            class.get_fn_name(), class.get_delegate_path(), class.get_fn_path(), class.get_fn_name()));
+        hook_assign.push_str(&format!("            {}.{}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
+          &evaluator.ffi_hook_namespace(),
           &ffi.csharp_class_name(), 
           &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&class.get_fn_name().to_ascii_uppercase()),
           delegate_type,
@@ -202,13 +211,18 @@ impl HookAssignCodegen for HookAssignCodegenStaticOffset {
         ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         let mut hook_assign = String::new();
-        hook_assign.push_str(&format!("var addr = {}\n",
-            get_resolve_function_path(&None, &evaluator.ffi_utility_class(), &hooks_class)));  
-        hook_assign.push_str(&format!("{}.{}.{}(({})addr);\n", 
+        hook_assign.push_str(&format!("var addr_{} = {}\n",
+            state.static_name,
+            get_resolve_function_path(
+                &None, &evaluator.ffi_utility_class(), 
+                &hooks_class, Some(format!("0x{:x}", self.0.0))
+        )));
+        hook_assign.push_str(&format!("{}.{}.{}(({})addr_{});\n", 
             &evaluator.ffi_hook_namespace(),
             &ffi.csharp_class_name(),
             &riri_mod_tools_impl::hook_codegen::Reloaded2CSharpHook::make_hook_set_string(&state.static_name), 
-            &state.static_type
+            &state.static_type,
+            &state.static_name
         ));
         Ok(hook_assign)
     }
@@ -230,7 +244,10 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffset<'a> {
             self.0.sig, class.get_fn_name()));
         hook_assign.push_str("\x7b\n");
         hook_assign.push_str(&format!("                var addr = {}\n",
-            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));
+            get_resolve_function_path(
+                &self.0.resolve_type, &evaluator.ffi_utility_class(), 
+                &hooks_class, None
+        )));
         hook_assign.push_str(&format!("                _{} = _hooks!.CreateHook<{}>({}, (long)addr).Activate();\n",
             class.get_fn_name(), class.get_delegate_path(), class.get_fn_path()));
         hook_assign.push_str(&format!("                {}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
@@ -252,7 +269,10 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffset<'a> {
             self.0.sig, &state.static_name.to_ascii_lowercase()));
         hook_assign.push_str("\x7b\n");
         hook_assign.push_str(&format!("                var addr = {}\n",
-            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));  
+            get_resolve_function_path(
+                &self.0.resolve_type, &evaluator.ffi_utility_class(), 
+                &hooks_class, None
+        )));
         hook_assign.push_str(&format!("                {}.{}.{}(({})addr);\n",
             &evaluator.ffi_hook_namespace(),
             &ffi.csharp_class_name(),
@@ -285,7 +305,10 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffsetSharedScans<'a> {
 
         hook_assign.push_str("\x7b\n");
         hook_assign.push_str(&format!("                var addr = {}\n",
-            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));
+            get_resolve_function_path(
+                &self.0.resolve_type, &evaluator.ffi_utility_class(), 
+                &hooks_class, None
+        )));
         hook_assign.push_str(&format!("                _{} = _hooks!.CreateHook<{}>({}, addr).Activate();\n",
             class.get_fn_name(), class.get_delegate_path(), class.get_fn_path()));
         hook_assign.push_str(&format!("                {}.{}(({})_{}.OriginalFunctionWrapperAddress);\n",
@@ -312,7 +335,10 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffsetSharedScans<'a> {
             &state.static_name));
         hook_assign.push_str("\x7b\n");
         hook_assign.push_str(&format!("                var addr = {}\n",
-            get_resolve_function_path(&self.0.resolve_type, &evaluator.ffi_utility_class(), &hooks_class)));  
+            get_resolve_function_path(
+                &self.0.resolve_type, &evaluator.ffi_utility_class(), 
+                &hooks_class, None
+        )));
         hook_assign.push_str(&format!("                {}.{}.{}(({})addr);\n",
             &evaluator.ffi_hook_namespace(),
             &ffi.csharp_class_name(),

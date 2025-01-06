@@ -84,7 +84,7 @@ unsafe fn try_deref_instruction_pointer(p: *mut u8) -> CanNull {
 /// # Example
 /// In P3R.exe: External sigscanning library searches for value matching
 /// "40 53 48 83 EC 30 F3 0F 10 05 ?? ?? ?? ?? 48 89 CB" -> 0xbe34240
-/// ```
+/// ```ignore
 /// let set_bustup_shadow_color = get_direct_address(0xbe34240);
 /// // returns 0x14be34240
 /// ```

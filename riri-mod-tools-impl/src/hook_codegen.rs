@@ -101,15 +101,113 @@ impl Reloaded2CSharpHook {
             None
         }
     }
-    fn check_expression_statement(expr: &mut syn::Expr, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
+
+    fn traverse_expression(expr: &mut syn::Expr, fn_name: &syn::Ident) {
         match expr {
-            syn::Expr::Macro(m) => match Self::replace_original_function_unchecked(&m, fn_name) {
-                Some(v) => Some(v),
-                None => None
+            // Direct invocation
+            syn::Expr::Macro(m) => {
+                match Self::replace_original_function_unchecked(&m, fn_name) {
+                    Some(r) => match r {
+                        Ok(v) => *expr = v,
+                        Err(_) => ()
+                    },
+                    None => ()
+                }
             },
-            _ => None
+            // blocked scope
+            syn::Expr::Block(b) => Self::traverse_statements(&mut b.block.stmts, fn_name),
+            // unsafe blocked scope
+            syn::Expr::Unsafe(u) => Self::traverse_statements(&mut u.block.stmts, fn_name),
+            // binary operations (e.g arithmetic)
+            syn::Expr::Binary(b) => {
+                Self::traverse_expression(&mut b.left, fn_name);
+                Self::traverse_expression(&mut b.right, fn_name);
+            },
+            // Cast operation
+            syn::Expr::Cast(c) => Self::traverse_expression(&mut c.expr, fn_name),
+            // Parenthesized expressions
+            syn::Expr::Paren(p) => Self::traverse_expression(&mut p.expr, fn_name),
+            syn::Expr::Tuple(t) => {
+                for elem in &mut t.elems {
+                    Self::traverse_expression(elem, fn_name);
+                }
+            },
+            // Unary operation (e.g dereferencing)
+            syn::Expr::Unary(u) => Self::traverse_expression(&mut u.expr, fn_name),
+            // Address-of
+            syn::Expr::RawAddr(r) => Self::traverse_expression(&mut r.expr, fn_name),
+            // Reference
+            syn::Expr::Reference(r) => Self::traverse_expression(&mut r.expr, fn_name),
+            // If-then-else
+            syn::Expr::If(i) => {
+                Self::traverse_expression(&mut i.cond, fn_name);
+                Self::traverse_statements(&mut i.then_branch.stmts, fn_name);
+                if i.else_branch.is_some() {
+                    Self::traverse_expression(i.else_branch.as_mut().unwrap().1.as_mut(), fn_name);
+                }
+            },
+            // For loop
+            syn::Expr::ForLoop(f) => {
+                Self::traverse_expression(&mut f.expr, fn_name);
+                Self::traverse_statements(&mut f.body.stmts, fn_name);
+            },
+            // Conditinless loop
+            syn::Expr::Loop(l) => {
+                Self::traverse_statements(&mut l.body.stmts, fn_name);
+            },
+            // While loop
+            syn::Expr::While(w) => {
+                Self::traverse_expression(&mut w.cond, fn_name);
+                Self::traverse_statements(&mut w.body.stmts, fn_name);
+            },
+            // Function call
+            syn::Expr::Call(c) => {
+                for arg in &mut c.args {
+                    Self::traverse_expression(arg, fn_name);
+                }
+            },
+            // Method call
+            syn::Expr::MethodCall(m) => {
+                for arg in &mut m.args {
+                    Self::traverse_expression(arg, fn_name);
+                }
+            },
+            // Match
+            syn::Expr::Match(m) => {
+                Self::traverse_expression(&mut m.expr, fn_name);
+                for arm in &mut m.arms {
+                    if arm.guard.is_some() {
+                        Self::traverse_expression(arm.guard.as_mut().unwrap().1.as_mut(), fn_name);
+                    }
+                    Self::traverse_expression(arm.body.as_mut(), fn_name);
+                }
+            }
+            _ => ()
         }
     }
+
+    // Search statement list for invocations of original_function! and replace it with our hooked
+    // pointer
+    fn traverse_statements(stmts: &mut Vec<syn::Stmt>, fn_name: &syn::Ident) {
+        for stmt in stmts {
+            match stmt {
+                syn::Stmt::Local(l) => {
+                    match &mut l.init {
+                        Some(v) => {
+                            Self::traverse_expression(&mut v.expr, fn_name);
+                            if v.diverge.is_some() {
+                                Self::traverse_expression(v.diverge.as_mut().unwrap().1.as_mut(), fn_name);
+                            }
+                        },
+                        None => continue
+                    }
+                },
+                syn::Stmt::Expr(e, _) => Self::traverse_expression(e, fn_name),
+                _ => continue
+            }
+        }
+    }
+
     fn get_type_name(ty: &syn::Type) -> syn::Result<TokenStream2> {
         match ty {
             syn::Type::Path(p) => Ok(p.path.to_token_stream()),
@@ -133,6 +231,9 @@ impl HookFramework for Reloaded2CSharpHook {
         if f.sig.generics.params.len() > 0 {
             return Err(syn::Error::new(f.span(), "Generic type and lifetime arguments aren't supported for hookable functions"))
         }
+        if f.sig.abi.is_none() || &f.sig.abi.as_ref().unwrap().name.as_ref().unwrap().value() != "C" {
+            return Err(syn::Error::new(f.span(), "Hookable function must be defined with C ABI: extern \"C\""))
+        } 
         // create OnceCell to store original function
         let fn_name_upper = {
             let mut s = f.sig.ident.to_string();
@@ -159,44 +260,7 @@ impl HookFramework for Reloaded2CSharpHook {
             pub static #ptr_fn_name: ::std::sync::OnceLock<#fn_ty> = ::std::sync::OnceLock::new();
         };
         let fn_set_og_tk = self.create_set_function(&fn_ty, &fn_name_upper, &ptr_fn_name);
-        // add extern function to set cell, it it hasn't been overriden
-        /*
-        let set_cell_fn_name = unsafe { self.hook_set_name.assume_init_ref() };
-        let fn_target_abi = quote! { extern "C" };
-        let fn_set_og_tk = quote! {
-            #[no_mangle]
-            #[doc(hidden)]
-            pub unsafe #fn_target_abi fn #set_cell_fn_name(cb: #fn_ty) {
-                let _ = #ptr_fn_name.set(cb);
-            }
-        };
-        */
-        for stmt in f.block.stmts.iter_mut() {
-            match stmt {
-                syn::Stmt::Local(l) => {
-                    match &mut l.init {
-                        Some(i) => {
-                            if let Some(v) = Self::check_expression_statement(&mut i.expr, &ptr_fn_name) {
-                                *i.expr = v?;
-                            }
-                            if let Some(e) = &mut i.diverge {
-                                if let Some(v) = Self::check_expression_statement(&mut e.1, &ptr_fn_name) {
-                                    *e.1 = v?;
-                                }
-                            }
-                        },
-                        None => continue
-                    }
-                },
-                syn::Stmt::Expr(e, t) => {
-                    match Self::check_expression_statement(e, &ptr_fn_name) {
-                        Some(v) => *e = v?,
-                        None => continue
-                    } 
-                },
-                _ => continue,
-            }
-        }
+        Self::traverse_statements(&mut f.block.stmts, &ptr_fn_name);
         let fk = f.to_token_stream();
         Ok(quote! {
             #fn_og_tk // ItemStatic

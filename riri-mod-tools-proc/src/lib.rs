@@ -72,6 +72,7 @@ pub fn vtable_method(input: TokenStream, annotated_item: TokenStream) -> TokenSt
 /// Given the following struct:
 ///
 /// ``` 
+/// # use riri_mod_tools_proc::ensure_layout;
 /// pub struct DatUnitId(u32);
 ///
 /// #[ensure_layout(size = 0x5c)]
@@ -87,7 +88,7 @@ pub fn vtable_method(input: TokenStream, annotated_item: TokenStream) -> TokenSt
 /// The generated struct will be
 ///
 /// ```
-///
+/// # pub struct DatUnitId(u32);
 /// #[repr(C, align(4))]
 /// pub struct DatUnitArchetype {
 ///     flag: u16,

@@ -149,7 +149,7 @@ trait OffsetBuilder {
 /// generated diagnostics https://github.com/rust-lang/rust/issues/54140 , but this feature is only
 /// available at nightly *and in proc_macro*.)
 #[derive(Clone, Copy, Debug)]
-pub struct StaticOffset(usize);
+pub struct StaticOffset(pub usize);
 
 impl OffsetBuilder for StaticOffset {
     fn from_expr_call(entry: &syn::ExprCall) -> syn::Result<Self> where Self : Sized {
