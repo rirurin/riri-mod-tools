@@ -212,7 +212,7 @@ fn hook_original_function_in_main_block() -> ReturnType {
     let attributes = quote! { static_offset(0) };
     let result = riri_hook_fn_impl(attributes, input_function.clone());
     // let transformed: syn::File = syn::parse2(result)?;
-    println!("{}", result.to_string());
+    // println!("{}", result.to_string());
     Ok(())
 }
 /*

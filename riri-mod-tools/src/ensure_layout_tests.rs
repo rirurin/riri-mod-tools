@@ -74,6 +74,24 @@ fn zero_field_type() -> ReturnType {
 }
 
 #[test]
+fn correct_generic_types() -> ReturnType {
+    use riri_mod_tools_impl::ensure_layout::ensure_layout_impl;
+    //use syn::parse2;
+    use quote::quote;
+    let input_struct = quote! {
+        pub struct IntegerMaybe {
+            #[field_offset(0x0)] int: Option<u32>,
+        }
+    };
+    let attributes = quote! { size = 0x10 };
+
+    let result = ensure_layout_impl(attributes, input_struct);
+    // validate the layout
+    let transformed: syn::ItemStruct = syn::parse2(result)?;
+    Ok(())
+}
+
+#[test]
 #[ignore]
 fn correct_arrays() -> ReturnType {
     Ok(())

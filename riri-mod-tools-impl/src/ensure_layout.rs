@@ -62,7 +62,7 @@ impl EnsureLayout {
     fn build_type_fragment(ty: &syn::Type) -> TokenStream2 {
         match ty {
             syn::Type::Path(p) => {
-                let p_i = p.path.get_ident().unwrap();
+                let p_i = p.path.to_token_stream();
                 quote! { ::core::mem::size_of::<#p_i>() }
             },
             syn::Type::Ptr(_p) => {
