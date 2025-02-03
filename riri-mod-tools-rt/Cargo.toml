@@ -15,6 +15,12 @@ features = [
     "Win32_System_Threading"
 ]
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.169"
+
+[features]
+detailed-logs = []
+
 # Profile Build
 [profile.profile]
 inherits = "release"

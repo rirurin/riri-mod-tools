@@ -37,10 +37,10 @@ namespace {{ffi_namespace}}
 
 	// Logger
 	[DllImport(__DllName, EntryPoint = "set_reloaded_logger", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-	internal static extern nuint set_reloaded_logger(delegate* unmanaged[Stdcall]<nint, nint, int, void> offset);
+	internal static extern nuint set_reloaded_logger(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
 
 	[DllImport(__DllName, EntryPoint = "set_reloaded_logger_newline", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-	internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, void> offset);
+	internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
     }
 }
 
@@ -49,12 +49,12 @@ namespace {{mod_id}}
     public unsafe partial class Mod
     {
 	[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
-	public static unsafe void ReloadedLoggerWrite(nint p, nint len, int color) 
+	public static unsafe void ReloadedLoggerWrite(nint p, nint len, int color, int level) 
 	{
 	    _logger!.WriteAsync($"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}", Color.FromArgb(color));
 	}
 	[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
-	public static unsafe void ReloadedLoggerWriteLine(nint p, nint len, int color) 
+	public static unsafe void ReloadedLoggerWriteLine(nint p, nint len, int color, int level)
 	{
 	    _logger!.WriteLineAsync($"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}", Color.FromArgb(color));
 	}

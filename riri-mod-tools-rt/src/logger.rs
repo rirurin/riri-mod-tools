@@ -214,44 +214,64 @@ pub static GLOBAL_LOG_LEVEL: LogLevel = LogLevel::Verbose;
 macro_rules! log {
     ($ty:ident, $($fmt:tt)*) => {
         if $crate::logger::LogLevel::$ty as u32 >= $crate::logger::GLOBAL_LOG_LEVEL as u32 {
-            let text: String = format!($($fmt)*);
+            let file = file!();
+            let line = line!();
+            let thread_id = $crate::address::get_thread_id();
+            let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color());
+                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color(), $crate::logger::LogLevel::$ty);
             }
         }
     };
     ($ty:ident, $col:path, $($fmt:tt)*) => {
         if $crate::logger::LogLevel::$ty as u32 >= $crate::logger::GLOBAL_LOG_LEVEL as u32 {
-            let text: String = format!($($fmt)*);
+            let file = file!();
+            let line = line!();
+            let thread_id = $crate::address::get_thread_id();
+            let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::builtin_colors::$col);
+                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::builtin_colors::$col, $crate::logger::LogLevel::$ty);
             }
         }
     };
 }
+
 #[macro_export]
 macro_rules! logln {
     ($ty:ident, $($fmt:tt)*) => {
         if $crate::logger::LogLevel::$ty as u32 >= $crate::logger::GLOBAL_LOG_LEVEL as u32 {
-            let text: String = format!($($fmt)*);
-            // text
+            let file = file!();
+            let line = line!();
+            let thread_id = $crate::address::get_thread_id();
+            let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color());
+                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color(), $crate::logger::LogLevel::$ty);
             }
         }
     };
     ($ty:ident, $col:path, $($fmt:tt)*) => {
         if $crate::logger::LogLevel::$ty as u32 >= $crate::logger::GLOBAL_LOG_LEVEL as u32 {
-            let text: String = format!($($fmt)*);
+            let file = file!();
+            let line = line!();
+            let thread_id = $crate::address::get_thread_id();
+            let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::builtin_colors::$col);
+                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::builtin_colors::$col, $crate::logger::LogLevel::$ty);
             }
         }
     };
 }
 
+pub fn transform_text(base: String, file: &'static str, line: u32, thread_id: u64) -> String {
+    if cfg!(feature = "detailed-logs") {
+        format!("[THREAD {}] [{}:{}] {}", thread_id, file, line, base)
+    } else {
+        base
+    }
+}
 
-type LogFn = unsafe extern "C" fn(*const u8, usize, LogColor) -> ();
+
+type LogFn = unsafe extern "C" fn(*const u8, usize, LogColor, LogLevel) -> ();
 /// A function pointer to invoke WriteAsync method in Reloaded-II's logger. This allows for
 /// us to write into the console output and have that saved into a log file.
 pub static RELOADED_LOGGER: OnceLock<LogFn> = OnceLock::new();
@@ -271,11 +291,11 @@ pub unsafe extern "C" fn set_reloaded_logger_newline(cb: LogFn) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn invoke_reloaded_logger(p: *const u8, len: usize, c: LogColor) {
-    (RELOADED_LOGGER.get().unwrap())(p, len, c);
+pub unsafe extern "C" fn invoke_reloaded_logger(p: *const u8, len: usize, c: LogColor, level: LogLevel) {
+    (RELOADED_LOGGER.get().unwrap())(p, len, c, level);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn invoke_reloaded_logger_newline(p: *const u8, len: usize, c: LogColor) {
-    (RELOADED_LOGGER_LN.get().unwrap())(p, len, c);
+pub unsafe extern "C" fn invoke_reloaded_logger_newline(p: *const u8, len: usize, c: LogColor, level: LogLevel) {
+    (RELOADED_LOGGER_LN.get().unwrap())(p, len, c, level);
 }

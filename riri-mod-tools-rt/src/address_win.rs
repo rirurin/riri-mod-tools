@@ -71,3 +71,7 @@ impl ProcessInfo {
     // pub fn get_main_window_handle(&self) {}
     // pub fn get_main_window_title(&self) {}
 }
+
+pub fn get_thread_id() -> u64 {
+    (unsafe { Threading::GetCurrentThreadId() }) as u64
+}
