@@ -166,3 +166,10 @@ pub unsafe extern "C" fn get_indirect_address_long4(ofs: usize) -> CanNull {
 pub unsafe extern "C" fn get_indirect_address_long4_abs(addr: *mut u8) -> CanNull {
     deref_int_relative_pointer(addr.add(4))
 }
+
+/// Get the hash of the target executable. Useful for selectively applying signatures by hash
+/// if a signature breaks between game updates
+#[no_mangle]
+pub unsafe extern "C" fn get_executable_hash() -> u64 {
+    CURRENT_PROCESS.get().unwrap().get_executable_hash()
+}

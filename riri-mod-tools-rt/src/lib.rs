@@ -8,4 +8,5 @@ pub mod address;
 pub mod address;
 pub mod assembly_utils;
 pub mod logger;
+pub mod mod_loader_data;
 pub mod sigscan_resolver;

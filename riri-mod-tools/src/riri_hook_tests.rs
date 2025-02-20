@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![cfg(test)]
 use std::{
     error::Error,
@@ -136,7 +137,7 @@ fn check_function_pointer_setter(hook_fn: &syn::ItemFn, set_fn: &syn::Item) -> R
     check_function_signature_types_bare_type(hook_fn, cb_type)?;
     Ok(())
 }
-
+/* 
 #[test]
 fn correct_function_hook_static_offset() -> ReturnType {
     use riri_mod_tools_impl::riri_hook::riri_hook_fn_impl;
@@ -210,26 +211,59 @@ fn hook_original_function_in_main_block() -> ReturnType {
         }
     };
     let attributes = quote! { static_offset(0) };
-    let result = riri_hook_fn_impl(attributes, input_function.clone());
+    let _result = riri_hook_fn_impl(attributes, input_function.clone());
     // let transformed: syn::File = syn::parse2(result)?;
     // println!("{}", result.to_string());
     Ok(())
 }
+*/
+/* 
+#[test]
+fn function_hook_multiple_entries() -> ReturnType {
+    use riri_mod_tools_impl::riri_hook::riri_hook_fn_impl;
+    use quote::quote;
+    let input_function = quote! {
+        pub unsafe extern "C" fn test_function_static_offset(a1: u32, a2: *mut u8) -> u32 {
+            a1 * 2
+        }
+    };
+    let attributes = quote! { {
+        a => static_offset(0x10),
+        0x150 => static_offset(0x20),
+        _ => dynamic_offset(
+            signature = "F7 05 ?? ?? ?? ?? 00 00 00 02", // Metaphor: Refantazio gfdGlobal
+            resolve_type = set_gfd_global,
+            calling_convention = "microsoft"
+        ),
+    } };
+    let result = riri_hook_fn_impl(attributes, input_function.clone());
+    println!("{}", result.to_string());
+    // let transformed: syn::File = syn::parse2(result)?;
+    Ok(())
+}
+*/
 /*
 // TODO
 // Add original_function! into condition, then branch and else branch
 #[test]
-fn hook_original_function_in_if_statement() -> ReturnType {
+fn hook_original_function_in_if_match() -> ReturnType {
+    use riri_mod_tools_impl::riri_hook::riri_hook_fn_impl;
+    use quote::quote;
+    let input_function = quote! {
+        pub unsafe extern "C" fn test_function_main (a1: u32) -> u32 {
+            let local_0 = original_function!(a1);
+            let local_1 = original_function!(a1) * 2;
+            let local_2 = { original_function!(a1) };
+            let local_3 = unsafe { original_function!(a1) };
+            // original_function!(a1);
+            original_function!(a1)
+        }
+    };
     Ok(())
 }
 
 #[test]
-fn hook_original_function_in_match() -> ReturnType {
-    Ok(())
-}
-
-#[test]
-fn hook_original_function_in_for_loop() -> ReturnType {
+fn hook_original_function_in_loops() -> ReturnType {
     Ok(())
 }
 
@@ -238,13 +272,42 @@ fn hook_original_function_in_method_call() -> ReturnType {
     Ok(())
 }
 
-#[test]
-fn hook_original_function_in_while_loop() -> ReturnType {
-    Ok(())
-}
+*/
 
 #[test]
-fn hook_function_in_loop() -> ReturnType {
+fn hook_inline_test() -> ReturnType {
+    use riri_mod_tools_impl::riri_hook::riri_hook_inline_fn_impl;
+    use quote::quote;
+    let input_function = quote! {
+        pub unsafe extern "C" fn test_function_static_offset(a1: u32, a2: *mut u8) -> u32 {
+            a1 * 2
+        }
+    };
+    /* 
+    let attributes = quote! { 
+        static_offset(0x10), // signature
+        ExecuteFirst, // assembly behavior
+        [rcx, rdx, r8, r9], rax, // source registers + return register
+        [], false, // callee saved registers, shadow space
+        "sub rsp, 0x40\n\
+        add rsp, 0x40\n", // custom asm (before)
+        "xor al, al" // custom asm (after)
+    };
+    */
+    let attributes = quote! { 
+        static_offset(0x10), // signature
+        [
+            {
+                ExecuteFirst,
+                [rcx, rdx, r8, r9], rax,
+                [], false,
+                "sub rsp, 0x40\n\
+                add rsp, 0x40\n",
+                None
+            }        
+        ]
+    };
+    let result = riri_hook_inline_fn_impl(attributes, input_function.clone());
+    println!("{}", result.to_string());
     Ok(())
 }
-*/

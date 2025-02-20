@@ -13,3 +13,20 @@ version = "0.1.0"
 edition = "2021"
 authors = [ "Rirurin" ]
 license-file = "LICENSE"
+
+# Optimized Release Build
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true  # Automatically strip symbols from the binary.
+
+# Release Build with Debug Info
+[profile.release-debug]
+codegen-units = 1
+inherits = "release"
+debug = true # Allow us to debug using LLDB
+
+# Release Build but without LTO since that takes 10 years
+[profile.release-ltoless]
+inherits = "release"
+lto = false

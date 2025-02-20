@@ -50,44 +50,58 @@ pub mod x86_64 {
     
     /// Pushes the value of an xmm register to the stack, saving it so it can be restored with
     /// `pop_xmm_for_fasm`.
-    #[no_mangle]
-    pub unsafe extern "C" fn push_xmm_for_fasm(n: XmmRegister) -> *const u8 {
+    pub fn push_xmm_for_fasm(n: XmmRegister) -> String {
         format!("sub rsp, {}\n\
                 movdqu dqword [rsp], xmm{}\n", 
                 std::mem::size_of::<XmmType>(), n as u32
-        ).leak().as_ptr()
+        )
     }
     /// Pushes all xmm registers to the stack, saving them to be restored with
     /// `pop_all_xmm_for_fasm`
-    #[no_mangle]
-    pub unsafe extern "C" fn push_all_xmm_for_fasm() -> *const u8 {
+    pub fn push_all_xmm_for_fasm() -> String {
         let mut out = String::new();
         out.push_str(&format!("sub rsp, {}\n", std::mem::size_of::<XmmType>() * XMM_COUNT));
         for i in 0..XMM_COUNT {
-            out.push_str(&format!("movdqu dqword {}, xmm{}\n", 
-                write_stack_pointer((XMM_COUNT-1-i) as isize * std::mem::size_of::<XmmType>() as isize), i));
+            unsafe {
+                out.push_str(&format!("movdqu dqword {}, xmm{}\n", 
+                    write_stack_pointer((XMM_COUNT-1-i) as isize * std::mem::size_of::<XmmType>() as isize), i));
+            }
         }
-        out.leak().as_ptr()
+        out
     }
     /// Pops the value of an xmm register to the stack, restoring it after being saved with
     /// `push_xmm_for_fasm`
-    #[no_mangle]
-    pub unsafe extern "C" fn pop_xmm_for_fasm(n: XmmRegister) -> *const u8 {
+    pub fn pop_xmm_for_fasm(n: XmmRegister) -> String {
         format!("movdqu xmm{}, dqword [rsp]\n\
                 add rsp, {}\n",
                 n as u32, std::mem::size_of::<XmmType>()
-        ).leak().as_ptr()
+        )
     }
     /// Pops all xmm registers from the stack, restoring them after being saved with
     /// `push_all_xmm_for_fasm`
-    #[no_mangle]
-    pub unsafe extern "C" fn pop_all_xmm_for_fasm() -> *const u8 {
+    pub fn pop_all_xmm_for_fasm() -> String {
         let mut out = String::new();
         out.push_str(&format!("add rsp, {}\n", std::mem::size_of::<XmmType>() * XMM_COUNT));
         for i in 0..XMM_COUNT {
-            out.push_str(&format!("movdqu dqword {}, xmm{}\n", 
-                write_stack_pointer(-((XMM_COUNT-i) as isize) * std::mem::size_of::<XmmType>() as isize), i));
+            unsafe {
+                out.push_str(&format!("movdqu dqword {}, xmm{}\n", 
+                    write_stack_pointer(-((XMM_COUNT-i) as isize) * std::mem::size_of::<XmmType>() as isize), i));
+            }
         }
-        out.leak().as_ptr()
+        out
+    }
+
+    pub fn preserve_microsoft_registers() -> String {
+        "push rcx\n\
+        push rdx\n\
+        push r8\n\
+        push r9\n".to_owned()
+    }
+
+    pub fn retrieve_microsoft_registers() -> String {
+        "pop r9\n\
+        pop r8\n\
+        pop rdx\n\
+        pop rcx\n".to_owned()
     }
 }

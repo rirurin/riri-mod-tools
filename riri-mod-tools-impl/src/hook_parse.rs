@@ -6,6 +6,7 @@ use proc_macro2::{
 use quote::ToTokens;
 use std::{
     borrow::{ Borrow, BorrowMut },
+    fmt::Display,
     mem::MaybeUninit
 };
 use syn::{
@@ -240,6 +241,27 @@ impl HookEntry {
     }
 }
 
+#[derive(Debug)]
+pub enum HookConditional {
+    // single entry
+    None,
+    // multiple entries
+    HashNamed(String),
+    HashNum(u64),
+    Default
+}
+
+impl Display for HookConditional {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let disp = match self {
+            Self::None | Self::Default => "".to_owned(),
+            Self::HashNamed(name) => name.clone(),
+            Self::HashNum(v) => format!("{}", v)
+        };
+        write!(f, "{}", disp)
+    }
+}
+
 pub(crate) struct StaticVarHook {
     pub name: syn::Ident,
     pub ty: syn::Type,
@@ -267,27 +289,48 @@ impl Parse for HookInfo {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         // #[riri_hook_fn(static_offset(...))]
         // or
-        // #[riri_hook_fn(XRD759_STEAM_102 => static_offset())]
-        // or
-        // #[riri_hook_fn(1 => static_offset(), _ => static_offset())]
+        // #[riri_hook_fn({
+        //    XRD759_STEAM_102 => static_offset(...),
+        //    XRD759_STEAM_103 => static_offset(...),
+        //    _ => dynamic_offset(...)
+        // })]
         //
-        let mut hook_var: Vec<HookEntry> = vec![];
-        if input.peek(syn::Ident) { 
-            if input.peek2(syn::token::Paren) { // one entry only
-                let entry = syn::ExprCall::parse(input)?;
-                hook_var.push(HookEntry::new(&entry)?);
-            } else if input.peek2(Token![=>]) { // multiple entries
-                let arms = Punctuated::<syn::Arm, Token![,]>::parse_terminated(input)?;
-                let mut default_arm = false;
-                for arm in &arms {
-                    let entry = match arm.body.borrow() {
-                        syn::Expr::Call(c) => c,
-                        _ => return Err(syn::Error::new(arm.span(), "Invalid hook entry format"))
-                    };
-                    match &arm.pat {
-                        syn::Pat::Ident(v) => hook_var.push(HookEntry::new(&entry)?),
-                        _ => return Err(syn::Error::new(arm.span(), "Unimplemented match pattern"))
-                    }
+        let mut hook_var: Vec<(HookConditional, HookEntry)> = vec![];
+        if input.peek(syn::Ident) && input.peek2(syn::token::Paren) { // one entry only
+            let entry = syn::ExprCall::parse(input)?;
+            hook_var.push((HookConditional::None, HookEntry::new(&entry)?));
+        } else if input.peek(syn::token::Brace) { // multiple entries
+            let entries;
+            syn::braced!(entries in input);
+            let mut arms: Vec<syn::Arm> = vec![];
+            while !entries.is_empty() {
+                arms.push(entries.parse()?);
+            }
+            let mut has_default_arm = false;
+            for arm in &arms {
+                if has_default_arm {
+                    return Err(syn::Error::new(arm.span(), "Default arm must be the last arm"));
+                }
+                let entry = match arm.body.borrow() {
+                    syn::Expr::Call(c) => c,
+                    _ => return Err(syn::Error::new(arm.span(), "Invalid hook entry format"))
+                };
+                match &arm.pat {
+                    syn::Pat::Ident(v) => {
+                        hook_var.push((HookConditional::HashNamed(v.ident.to_string()), HookEntry::new(&entry)?))
+                    },
+                    syn::Pat::Lit(l) => {
+                        if let syn::Lit::Int(i) =  &l.lit {
+                            hook_var.push((HookConditional::HashNum(i.base10_parse::<u64>()?), HookEntry::new(&entry)?))
+                        } else {
+                            return Err(syn::Error::new(arm.span(), "Only integer literals are allowed"));
+                        }
+                    },
+                    syn::Pat::Wild(w) => {
+                        has_default_arm = true;
+                        hook_var.push((HookConditional::Default, HookEntry::new(&entry)?))
+                    },
+                    _ => return Err(syn::Error::new(arm.span(), "Unimplemented match pattern"))
                 }
             }
         } else {
@@ -355,5 +398,268 @@ impl Parse for CppClassMethods {
             }
         }
         Ok(CppClassMethods{ path, auto_drop })
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum AsmHookExecuteBehavior {
+    ///  Executes your assembly code before the original.
+    ExecuteFirst,
+    /// Executes your assembly code after the original.
+    ExecuteAfter,
+    /// Do not execute original replaced code. (Dangerous!)
+    DoNotExecuteOriginal
+}
+
+impl TryFrom<String> for AsmHookExecuteBehavior {
+    type Error = syn::Error;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_ref() {
+            "ExecuteFirst" => Ok(Self::ExecuteFirst),
+            "ExecuteAfter" => Ok(Self::ExecuteAfter),
+            "DoNotExecuteOriginal" => Ok(Self::DoNotExecuteOriginal),
+            _ => Err(syn::Error::new(
+                Span2::call_site(),
+                &format!("Unknown assembly execute method {}", &value)
+            ))
+        }
+    }
+}
+
+impl From<AsmHookExecuteBehavior> for &'static str {
+    fn from(value: AsmHookExecuteBehavior) -> Self {
+        match value {
+            AsmHookExecuteBehavior::ExecuteFirst => "ExecuteFirst",
+            AsmHookExecuteBehavior::ExecuteAfter => "ExecuteAfter",
+            AsmHookExecuteBehavior::DoNotExecuteOriginal => "DoNotExecuteOriginal",
+        }
+    }
+}
+
+impl Display for AsmHookExecuteBehavior {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v: &str = (*self).into();
+        write!(f, "{}", v)
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, Copy, Clone)]
+pub enum RegistersX86 {
+    rax, rbx, rcx, rdx, 
+    rsi, rdi, rbp, rsp, 
+    r8, r9, r10, r11,
+    r12, r13, r14, r15
+}
+
+impl TryFrom<String> for RegistersX86 {
+    type Error = syn::Error;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_ref() {
+            "rax" => Ok(Self::rax),
+            "rbx" => Ok(Self::rbx),
+            "rcx" => Ok(Self::rcx),
+            "rdx" => Ok(Self::rdx),
+            "rsi" => Ok(Self::rsi),
+            "rdi" => Ok(Self::rdi),
+            "rbp" => Ok(Self::rbp),
+            "rsp" => Ok(Self::rsp),
+            "r8" => Ok(Self::r8),
+            "r9" => Ok(Self::r9),
+            "r10" => Ok(Self::r10),
+            "r11" => Ok(Self::r11),
+            "r12" => Ok(Self::r12),
+            "r13" => Ok(Self::r13),
+            "r14" => Ok(Self::r14),
+            "r15" => Ok(Self::r15),
+            _ => Err(syn::Error::new(
+                Span2::call_site(),
+                &format!("Unknown register {}", &value)
+            ))
+        }
+    }
+}
+
+impl From<RegistersX86> for &'static str {
+    fn from(value: RegistersX86) -> Self {
+        match value {
+            RegistersX86::rax => "rax",
+            RegistersX86::rbx => "rbx",
+            RegistersX86::rcx => "rcx",
+            RegistersX86::rdx => "rdx",
+            RegistersX86::rsi => "rsi",
+            RegistersX86::rdi => "rdi",
+            RegistersX86::rbp => "rbp",
+            RegistersX86::rsp => "rsp",
+            RegistersX86::r8 => "r8",
+            RegistersX86::r9 => "r9",
+            RegistersX86::r10 => "r10",
+            RegistersX86::r11 => "r11",
+            RegistersX86::r12 => "r12",
+            RegistersX86::r13 => "r13",
+            RegistersX86::r14 => "r14",
+            RegistersX86::r15 => "r15",
+        }
+    }
+}
+
+impl Display for RegistersX86 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v: &str = (*self).into();
+        write!(f, "{}", v)
+    }
+}
+
+//
+// #[riri_hook_inline_fn(
+//      static_offset(0xa150), // static/dynamic offset
+//      count must match up with signature count
+//      [
+//          {
+//              ExecuteFirst, // hook execution order
+//              [r8, r9, r15], rax, // parameter registers + return register
+//              false, // allocate shadow space
+//              [], // callee saved registers
+//              "sub rsp, 0x40", // insert custom assembly before
+//              "add rsp, 0x40" // insert custom assembly after
+//          },
+//          {
+//              ...
+//          }
+//      ]
+// )]
+//
+//
+#[derive(Debug)]
+pub struct AssemblyFunctionHook {
+    pub hook_info: HookInfo,
+    pub data: Vec<AssemblyFunctionHookData>
+}
+
+impl Parse for AssemblyFunctionHook {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let hook_info: HookInfo = input.parse()?;
+        let mut asm_param = 0;
+        let _: Token![,] = input.parse()?;
+        let asm_stream;
+        syn::bracketed!(asm_stream in input);
+        let asm_entries = asm_stream.parse_terminated(AssemblyFunctionHookData::parse, Token![,])?;
+        if asm_entries.len() != hook_info.0.len() {
+            return Err(syn::Error::new(input.span(), "Assembly entry data array count should match signature array length"));
+        }
+        let data: Vec<AssemblyFunctionHookData> = asm_entries.into_iter().collect();
+        Ok(Self { hook_info, data })
+    }
+}
+#[derive(Debug)]
+pub struct AssemblyFunctionHookData {
+    pub execute_mode: AsmHookExecuteBehavior,
+    // last one is return register
+    pub registers: Vec<RegistersX86>,
+    pub callee_saved_registers: Vec<RegistersX86>,
+    pub allocate_shadow_space: bool,
+    pub asm_insert_before: Option<String>,
+    pub asm_insert_after: Option<String>
+}
+
+impl Parse for AssemblyFunctionHookData {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut asm_data_index = 0;
+        let mut execute_mode = AsmHookExecuteBehavior::ExecuteFirst;
+        let mut registers = vec![];
+        let mut callee_saved_registers = vec![];
+        let mut allocate_shadow_space = false;
+        let mut asm_insert_before = None;
+        let mut asm_insert_after = None;
+        let asm_fields;
+        syn::braced!(asm_fields in input);
+        while !asm_fields.is_empty() {
+            match asm_data_index {
+                0 => { // execute mode
+                    let execute_ident: syn::Ident = asm_fields.parse()?;
+                    execute_mode = execute_ident.to_string().try_into()?;
+                },
+                1 => { // parameter registers
+                    let reg_stream;
+                    syn::bracketed!(reg_stream in asm_fields);
+                    let regs = reg_stream.parse_terminated(
+                        syn::Ident::parse, Token![,])?;
+                    registers = Vec::with_capacity(regs.len());
+                    for reg in regs {
+                        registers.push(reg.to_string().try_into()?);
+                    }
+                },
+                2 => { // return register
+                    let ret_reg: syn::Ident = asm_fields.parse()?;
+                    registers.push(ret_reg.to_string().try_into()?);
+                },
+                3 => { // callee saved registers
+                    let reg_stream;
+                    syn::bracketed!(reg_stream in asm_fields);
+                    let regs = reg_stream.parse_terminated(
+                        syn::Ident::parse, Token![,])?;
+                    callee_saved_registers = Vec::with_capacity(regs.len());
+                    for reg in regs {
+                        callee_saved_registers.push(reg.to_string().try_into()?);
+                    }
+                },
+                4 => { // allocate shadow space
+                    let lit = syn::Lit::parse(&asm_fields)?;
+                    if let syn::Lit::Bool(b) = lit {
+                        allocate_shadow_space = b.value;
+                    } else {
+                        return Err(syn::Error::new(asm_fields.span(), "Boolean value must be used to toggle shadow space"))
+                    }
+                },
+                5 => { // inline assembly before
+                    if asm_fields.peek(syn::Ident) {
+                        let ident = syn::Ident::parse(&asm_fields)?;
+                        if &ident.to_string() != "None" {
+                            return Err(syn::Error::new(asm_fields.span(), "Inline assembly must be \"None\" or a string"))
+                        }
+                    } else {
+                        let lit = syn::Lit::parse(&asm_fields)?;
+                        if let syn::Lit::Str(s) = lit {
+                            asm_insert_before = Some(s.value());
+                        } else {
+                            return Err(syn::Error::new(asm_fields.span(), "String value must be used to define inline assembly"))
+                        }
+                    }
+                },
+                6 => { // inline assembly after
+                    if asm_fields.peek(syn::Ident) {
+                        let ident = syn::Ident::parse(&asm_fields)?;
+                        if &ident.to_string() != "None" {
+                            return Err(syn::Error::new(asm_fields.span(), "Inline assembly must be \"None\" or a string"))
+                        }
+                    } else {
+                        let lit = syn::Lit::parse(&asm_fields)?;
+                        if let syn::Lit::Str(s) = lit {
+                            asm_insert_after = Some(s.value());
+                        } else {
+                            return Err(syn::Error::new(asm_fields.span(), "String value must be used to define inline assembly"))
+                        }
+                    }
+                },
+                _ => {
+                    return Err(syn::Error::new(asm_fields.span(), "Too many assembly parameters"));
+                }
+            };
+            asm_data_index += 1;
+            if asm_fields.peek(Token![,]) {
+                let _: Token![,] = asm_fields.parse()?;
+            } else { break; }
+        }
+        if asm_data_index < 3 {
+            return Err(syn::Error::new(asm_fields.span(), "Missing required parameters: Execute mode and registers"));
+        }
+        Ok(Self {
+            execute_mode,
+            registers,
+            callee_saved_registers,
+            allocate_shadow_space,
+            asm_insert_before,
+            asm_insert_after,
+        })
     }
 }

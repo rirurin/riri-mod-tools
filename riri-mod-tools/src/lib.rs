@@ -5,6 +5,7 @@ pub mod ensure_layout_tests;
 pub(crate) mod hbs {
     pub(crate) mod ffi_builtin;
     pub(crate) mod mod_main;
+    pub(crate) mod hashes;
 }
 pub mod mod_package;
 pub mod platform;

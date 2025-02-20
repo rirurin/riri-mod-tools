@@ -83,8 +83,11 @@ impl Reloaded2CSharpHook {
         }
     }
     fn replace_original_function_unchecked(expr: &syn::ExprMacro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
-        if expr.mac.path.is_ident("original_function") {
-            let arg_tokens = &expr.mac.tokens;
+        Self::replace_original_function_unchecked_inner(&expr.mac, fn_name)
+    }
+    fn replace_original_function_unchecked_inner(mac: &syn::Macro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
+        if mac.path.is_ident("original_function") {
+            let arg_tokens = &mac.tokens;
             Some(Ok(syn::Expr::parse.parse2(quote! { (#fn_name.get().unwrap())(#arg_tokens) }).unwrap()))
         } else {
             None

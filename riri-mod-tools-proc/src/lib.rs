@@ -131,4 +131,11 @@ pub fn friendly_name(input: TokenStream) -> TokenStream {
     input
 }
 
-
+/// Like `riri_hook_fn`, but defines a mid-function hook instead.
+/// 
+/// `callee_saved_registers`: A list of registers to save information for. By default, Reloaded-II
+/// will preserve registers rbx, rdi, rs9, r12, r13, r14 and r15.
+#[proc_macro_attribute]
+pub fn riri_hook_inline_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
+    riri_hook::riri_hook_inline_fn_impl(input.into(), annotated_item.into()).into()
+}

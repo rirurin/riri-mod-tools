@@ -1,5 +1,9 @@
 #![allow(dead_code, unused_variables)]
-// use std::ptr::NonNull;
+use std::{
+    fs::File,
+    mem::MaybeUninit
+};
+use twox_hash::XxHash3_64;
 use windows::Win32::{
     Foundation,
     System::{ ProcessStatus, Threading }
@@ -15,7 +19,8 @@ type Module = Foundation::HMODULE;
 pub struct ProcessModule {
     owner: Handle,
     handle: Module,
-    module_size: usize
+    module_size: usize,
+    hash: u64
 }
 
 impl ProcessModule {
@@ -24,10 +29,16 @@ impl ProcessModule {
         ProcessStatus::GetModuleInformation(
             own, hndl, pinfo.as_mut_ptr(), std::mem::size_of::<ProcessStatus::MODULEINFO>() as u32
         )?;
+        let mut filename_buffer: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
+        let path_len = ProcessStatus::GetModuleFileNameExA(own, hndl, filename_buffer.assume_init_mut()); 
+        let exec = std::fs::read(std::str::from_utf8_unchecked(&filename_buffer.assume_init_ref()[..path_len as usize]))?;
+        let hash = XxHash3_64::oneshot(exec.as_slice());
+        println!("hash: 0x{:x}", hash);
         Ok(ProcessModule {
             owner: own,
             handle: hndl,
-            module_size: pinfo.assume_init_ref().SizeOfImage as usize
+            module_size: pinfo.assume_init_ref().SizeOfImage as usize,
+            hash
         })
     }
     pub fn get_base_address(&self) -> usize { self.handle.0 as usize }
@@ -68,6 +79,7 @@ impl ProcessInfo {
     pub fn get_main_module(&self) -> &ProcessModule { &self.executable }
     pub fn get_executable_address(&self) -> usize { self.get_main_module().get_base_address() }
     pub fn get_executable_size(&self) -> usize { self.get_main_module().get_memory_size() }
+    pub fn get_executable_hash(&self) -> u64 { self.get_main_module().hash }
     // pub fn get_main_window_handle(&self) {}
     // pub fn get_main_window_title(&self) {}
 }

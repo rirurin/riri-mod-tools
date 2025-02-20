@@ -24,18 +24,3 @@ features = [
     "Win32_System_ProcessStatus",
     "Win32_System_Threading"
 ]
-
-# Profile Build
-[profile.profile]
-inherits = "release"
-debug = true
-codegen-units = 1
-lto = true
-strip = false  # No stripping!!
-
-# Optimized Release Build
-[profile.release]
-codegen-units = 1
-lto = true
-strip = true  # Automatically strip symbols from the binary.
-panic = "unwind"

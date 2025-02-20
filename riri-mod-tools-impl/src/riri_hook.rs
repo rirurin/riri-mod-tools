@@ -55,7 +55,9 @@ use crate::{
         Reloaded2CSharpHook 
     },
     hook_parse::{
+        AssemblyFunctionHook,
         CppClassMethods,
+        HookConditional,
         HookEntry,
         HookInfoParam,
         HookParseTools,
@@ -64,9 +66,9 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct HookInfo(pub Vec<HookEntry>);
+pub struct HookInfo(pub Vec<(HookConditional, HookEntry)>);
 impl HookInfo {
-    pub(crate) fn new(entries: Vec<HookEntry>) -> Self {
+    pub(crate) fn new(entries: Vec<(HookConditional, HookEntry)>) -> Self {
         Self(entries)
     }
 }
@@ -74,7 +76,7 @@ impl HookInfo {
 pub(crate) enum HookItemType {
     Function(syn::ItemFn),
     Static(StaticVarHook),
-    CppClass(syn::ItemStruct)
+    CppClass(syn::ItemStruct),
 }
 
 impl quote::ToTokens for HookItemType {
@@ -143,15 +145,22 @@ impl HookFunctionBuildScriptItems {
     }
 }
 
+#[derive(Debug)]
+pub enum SourceFileEvaluationType {
+    CFunction(HookInfo),
+    Inline(AssemblyFunctionHook)
+}
+
 pub struct HookBuildScriptResult {
     pub name: String,
     pub items: Vec<syn::Item>,
-    pub args: HookInfo
+    // pub args: HookInfo
+    pub args: SourceFileEvaluationType
 }
 
 pub fn riri_hook_fn_build(input: TokenStream2, annotated_item: syn::ItemFn) -> syn::Result<HookBuildScriptResult> {
     let mut target = HookItemType::Function(annotated_item);
-    let args: HookInfo = syn::parse2(input)?;
+    let args = SourceFileEvaluationType::CFunction(syn::parse2(input)?);
     let mut transformer = Reloaded2CSharpHook::new();
     let transformed = transformer.codegen_rust(&mut target)?;
     // parse back into items to inject into file
@@ -215,7 +224,7 @@ impl HookStaticBuildScriptItems {
 }
 pub fn riri_hook_static_build(input: TokenStream2, annotated_item: syn::ItemMacro) -> syn::Result<HookBuildScriptResult> {
     let mut target = HookItemType::Static(get_riri_hook_macro_inner(annotated_item)?);
-    let args: HookInfo = syn::parse2(input)?;
+    let args = SourceFileEvaluationType::CFunction(syn::parse2(input)?);
     let mut transformer = Reloaded2CSharpHook::new();
     let transformed = transformer.codegen_rust(&mut target)?;
     Ok(HookBuildScriptResult {
@@ -270,4 +279,37 @@ pub fn cpp_class_methods_impl(input: TokenStream2, annotated_item: TokenStream2)
 
 pub fn vtable_method_impl(input: TokenStream2, annotated_item: TokenStream2) -> TokenStream2 {
     TokenStream2::from(syn::Error::new(input.span(), "vtable_method should only be added inside of an implementation annotated with cpp_class_methods!").to_compile_error())
+}
+
+// #[riri_hook_inline_fn]
+pub fn riri_hook_inline_fn_impl(input: TokenStream2, annotated_item: TokenStream2) -> TokenStream2 {
+    // Parse macro
+    let mut target: HookItemType = match syn::parse2(annotated_item) {
+        Ok(n) => HookItemType::Function(n),
+        Err(e) => return TokenStream2::from(e.to_compile_error())
+    }; 
+    let args: AssemblyFunctionHook = match syn::parse2(input) {
+        Ok(n) => n,
+        Err(e) => return TokenStream2::from(e.to_compile_error())
+    };
+    let mut transformer = Reloaded2CSharpHook::new();
+    // Code generation
+    let transformed = match transformer.codegen_rust(&mut target) {
+        Ok(n) => n,
+        Err(e) => return TokenStream2::from(e.to_compile_error())
+    };
+    transformed
+}
+
+pub fn riri_hook_inline_fn_build(input: TokenStream2, annotated_item: syn::ItemFn) -> syn::Result<HookBuildScriptResult> {
+    let mut target = HookItemType::Function(annotated_item);
+    let args= SourceFileEvaluationType::Inline(syn::parse2(input)?);
+    let mut transformer = Reloaded2CSharpHook::new();
+    let transformed = transformer.codegen_rust(&mut target)?;
+    // parse back into items to inject into file
+    Ok(HookBuildScriptResult {
+        name: target.get_name(),
+        items: HookFunctionBuildScriptItems::parse.parse2(transformed)?.to_items(),
+        args
+    })
 }

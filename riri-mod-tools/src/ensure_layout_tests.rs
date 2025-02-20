@@ -87,7 +87,7 @@ fn correct_generic_types() -> ReturnType {
 
     let result = ensure_layout_impl(attributes, input_struct);
     // validate the layout
-    let transformed: syn::ItemStruct = syn::parse2(result)?;
+    let _transformed: syn::ItemStruct = syn::parse2(result)?;
     Ok(())
 }
 

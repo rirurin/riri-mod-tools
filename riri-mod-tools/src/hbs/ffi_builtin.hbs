@@ -41,6 +41,11 @@ namespace {{ffi_namespace}}
 
 	[DllImport(__DllName, EntryPoint = "set_reloaded_logger_newline", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 	internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
+
+	// Executable hash
+	[DllImport(__DllName, EntryPoint = "get_executable_hash", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+	internal static extern ulong get_executable_hash();
+
     }
 }
 

@@ -130,6 +130,9 @@ pub mod reloaded3ririext {
             if let Some(n) = &self.Reloaded2Id { n } 
             else { &self.Id }
         }
+        pub fn get_mod_name(&self) -> &str {
+            &self.Name
+        }
         /*
         pub fn ffi_hook_namespace(&self) -> String {
             format!("{}.ReloadedFFI.Hooks", self.get_mod_id())
@@ -459,10 +462,12 @@ pub mod reloaded2 {
         }
     }
 }
-use std::{ 
+use handlebars::Handlebars;
+use std::{
     error::Error,
     fs,
-    path::Path,
+    io::Write,
+    path::{ Path, PathBuf },
     ptr::NonNull
 };
 
@@ -697,5 +702,58 @@ impl CargoInfo {
         Ok(res)
         // let pinned = Box::into_pin(res);
         // Ok(pinned)
+    }
+}
+
+pub const HASHES_FILENAME: &'static str = "hashes.toml";
+
+#[derive(Debug)]
+pub struct HashFile<'a> {
+    table: toml::Table,
+    middata: PathBuf,
+    data: HashFileData<'a>
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct HashFileData<'a> {
+    mod_id: &'a str,
+    mod_name: &'a str,
+    executable_hash: Vec<HashFileEntry>
+}
+impl<'a> HashFileData<'a> {
+    fn new(mod_id: &'a str, mod_name: &'a str) -> Self { 
+        Self { 
+            mod_id, mod_name, executable_hash: vec![]
+        }
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct HashFileEntry {
+    name: String,
+    hash: u64
+}
+
+impl<'a> HashFile<'a> {
+    pub fn new<T: AsRef<Path>>(base: T, mod_id: &'a str, mod_name: &'a str) -> Result<Self, Box<dyn Error>> {
+        let data = base.as_ref().join("data");
+        let middata = base.as_ref().join("middata");
+        let res = fs::read_to_string(data.join(HASHES_FILENAME))?;
+        Ok(HashFile {
+            table: res.parse::<toml::Table>()?,
+            middata,
+            data: HashFileData::new(mod_id, mod_name)
+        })
+    }
+    pub fn generate_mod_hashes(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut hbs = Handlebars::new();
+        hbs.register_template_string("hashes", crate::hbs::hashes::FILE)?;
+        let mut file = fs::File::create(self.middata.join("Hashes.g.cs"))?;
+        for (k, v) in &self.table {
+            let v_int = u64::from_str_radix(&v.as_str().unwrap()[2..], 16).unwrap();
+            self.data.executable_hash.push(HashFileEntry{ name: k.clone(), hash: v_int });
+        }
+        file.write(hbs.render("hashes", &self.data)?.as_bytes())?;
+        Ok(())
     }
 }
