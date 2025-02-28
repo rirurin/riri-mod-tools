@@ -1,8 +1,5 @@
-#![allow(dead_code, unused_variables)]
-use std::{
-    fs::File,
-    mem::MaybeUninit
-};
+#![allow(dead_code, unused_variables, unused_imports)]
+use std::mem::MaybeUninit;
 use twox_hash::XxHash3_64;
 use windows::Win32::{
     Foundation,

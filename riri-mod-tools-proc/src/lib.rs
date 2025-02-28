@@ -3,6 +3,7 @@
 use proc_macro::TokenStream;
 use riri_mod_tools_impl::{ 
     ensure_layout,
+    interleave,
     riri_hook
 };
 
@@ -138,4 +139,15 @@ pub fn friendly_name(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn riri_hook_inline_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
     riri_hook::riri_hook_inline_fn_impl(input.into(), annotated_item.into()).into()
+}
+
+/// Interleave an array or slice 
+#[proc_macro_derive(Interleave, attributes(ignore))]
+pub fn interleave(input: TokenStream) -> TokenStream {
+    interleave::interleave_impl(input.into()).into()
+}
+
+#[proc_macro]
+pub fn interleave_auto(input: TokenStream) -> TokenStream {
+    interleave::interleave_auto_impl(input.into()).into()
 }

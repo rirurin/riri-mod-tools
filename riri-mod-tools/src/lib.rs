@@ -7,6 +7,7 @@ pub(crate) mod hbs {
     pub(crate) mod mod_main;
     pub(crate) mod hashes;
 }
+pub mod interleave_tests;
 pub mod mod_package;
 pub mod platform;
 pub mod reloaded_codegen;

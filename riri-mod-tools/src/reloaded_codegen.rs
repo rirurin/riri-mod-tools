@@ -322,7 +322,36 @@ impl<'a> HookAssignCodegen for HookAssignCodegenDynamicOffset<'a> {
             assemble_info: &riri_mod_tools_impl::hook_parse::AssemblyFunctionHookData,
             cond: &riri_mod_tools_impl::hook_parse::HookConditional
         ) -> Result<String, Box<dyn Error>> {
-        todo!("...")
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        let mut hook_assign = String::new();
+        hook_assign.push_str(&format!("SigScan(\"{}\", \"{}\", x => ",
+            self.0.sig, class.get_fn_name()));
+        hook_assign.push_str("\x7b\n");
+        // Address resolver
+        hook_assign.push_str(&format!("                var addr = {}\n",
+            get_resolve_function_path(
+                &self.0.resolve_type, &evaluator.ffi_utility_class(), 
+                &hooks_class, None
+        )));
+        // Build assembly glue
+        hook_assign.push_str("            string[] function = \n");
+        hook_assign.push_str("            \x7b\n");
+        hook_assign.push_str("                \"use64\",\n");
+        if let Some(v) = &assemble_info.asm_insert_before {
+            hook_assign.push_str(v);
+        }
+        hook_assign.push_str(&format!("                $\"{{_hooks!.Utilities.GetAbsoluteCallMnemonics({}, out _{}_WRAP{})}}\",\n",
+            &class.get_fn_path(), &class.get_fn_name(), cond));
+        if let Some(v) = &assemble_info.asm_insert_after {
+            hook_assign.push_str(v);
+        }
+        hook_assign.push_str("            \x7d;\n");
+        // Assembly hook
+        let exec_mode: &str = assemble_info.execute_mode.into();
+        hook_assign.push_str(&format!("            _{}_ASM = _hooks!.CreateAsmHook(function, (long)addr, Reloaded.Hooks.Definitions.Enums.AsmHookBehaviour.{}).Activate();\n",
+            class.get_fn_name(), exec_mode));
+        hook_assign.push_str("            \x7d);\n");
+        Ok(hook_assign)
     }
     fn make_single_static_hook_assign<P: AsRef<Path>>(
         &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
