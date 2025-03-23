@@ -112,7 +112,6 @@ where Self: Sized + Copy
     }
     unsafe fn interleave_slice_without_len(data: &[Self]) -> Vec<u8> {
         let mut buf = Vec::with_capacity(size_of::<Self>() * data.len());
-        buf.set_len(INTERLEAVE_SLICE_LENGTH);
         Self::interleave_slice_inner(&mut buf, data);
         encode_delta_dif(std::slice::from_raw_parts_mut(
             buf.as_mut_ptr() as *mut u8, size_of::<Self>() * data.len()));

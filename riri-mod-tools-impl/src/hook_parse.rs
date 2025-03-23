@@ -204,15 +204,25 @@ impl OffsetBuilder for DynamicOffset {
             }
         }
         // get default arguments
-        if ret_sig == None {
-            return Err(syn::Error::new(entry.span(), "Signature field is required"));
+        if ret_sig.is_none() {
+            if let Some(s) = shared_scan.as_ref() {
+                if *s != RyoTuneSharedScan::Consume {
+                    return Err(syn::Error::new(entry.span(), "Signature field is required"));   
+                }
+            } else {
+                return Err(syn::Error::new(entry.span(), "Signature field is required"));   
+            }
         }
         if call_conv == None {
             // Atlus defaults to using Visual C++ compiler, so default to that
             call_conv = Some(CallingConvention::Microsoft);
         }
+        let sig = match ret_sig {
+            Some(v) => v.0,
+            None => "".to_string()
+        };
         Ok(DynamicOffset {
-            sig: ret_sig.unwrap().0,
+            sig,
             resolve_type: if resolve_type.is_some() { Some(resolve_type.unwrap().0) } else { None },
             call_conv: call_conv.unwrap(),
             shared_scan

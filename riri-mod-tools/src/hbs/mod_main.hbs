@@ -26,9 +26,10 @@ namespace {{mod_id}}
         private Config _configuration;
         private readonly IModConfig _modConfig;
 	    {{#if uses_shared_scans}}
-	    private static readonly ISharedScans? _sharedScans;
+	    private static ISharedScans? _sharedScans;
 	    {{/if}}
 	    private readonly IStartupScanner _startupScanner;
+	    private static nint _baseAddress;
 
 	    public void SigScan(string pattern, string name, Action<nuint> hookerCb)
 	    {
@@ -59,6 +60,9 @@ namespace {{mod_id}}
             _owner = context.Owner;
             _configuration = context.Configuration;
             _modConfig = context.ModConfig;
+	    var process = System.Diagnostics.Process.GetCurrentProcess();
+	    if (process == null || process.MainModule == null) throw new Exception("{{mod_name}}: Process is null");
+	    	_baseAddress = process.MainModule.BaseAddress;
 
 	        // Register mod interfaces
 	        if (_hooks == null) throw new Exception("{{mod_name}}: Could not get controller for Reloaded hooks");
