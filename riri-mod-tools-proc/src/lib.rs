@@ -4,7 +4,8 @@ use proc_macro::TokenStream;
 use riri_mod_tools_impl::{ 
     ensure_layout,
     interleave,
-    riri_hook
+    riri_hook,
+    riri_init
 };
 
 /// Defines a function that can hook into another function and replace or extend it's
@@ -150,4 +151,11 @@ pub fn interleave(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn interleave_auto(input: TokenStream) -> TokenStream {
     interleave::interleave_auto_impl(input.into()).into()
+}
+
+/// Defines a function that can hook into another function and replace or extend it's
+/// logic by invoking the original_function! macro. 
+#[proc_macro_attribute]
+pub fn riri_init_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
+    riri_init::riri_init_fn_impl(input.into(), annotated_item.into()).into()
 }

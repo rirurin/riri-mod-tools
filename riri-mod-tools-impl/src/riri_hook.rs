@@ -148,7 +148,8 @@ impl HookFunctionBuildScriptItems {
 #[derive(Debug)]
 pub enum SourceFileEvaluationType {
     CFunction(HookInfo),
-    Inline(AssemblyFunctionHook)
+    Inline(AssemblyFunctionHook),
+    InitFunction(String)
 }
 
 pub struct HookBuildScriptResult {

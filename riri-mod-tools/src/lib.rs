@@ -10,6 +10,10 @@ pub(crate) mod hbs {
 pub mod interleave_tests;
 pub mod mod_package;
 pub mod platform;
+pub mod r2 {
+    pub mod hook_assignment;
+    pub mod hook_evaluation;
+}
 pub mod reloaded_codegen;
 pub mod riri_hook_tests;
 pub mod utils;
