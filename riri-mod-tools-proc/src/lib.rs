@@ -159,3 +159,10 @@ pub fn interleave_auto(input: TokenStream) -> TokenStream {
 pub fn riri_init_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
     riri_init::riri_init_fn_impl(input.into(), annotated_item.into()).into()
 }
+
+/// When inside a hooked function, this call is replaced with either a raw function call if they
+/// share the same calling convention or to Reloaded's OriginalFunction if they don't
+#[proc_macro]
+pub fn create_hook(input: TokenStream) -> TokenStream {
+    riri_hook::create_hook_impl(input.into()).into()
+}

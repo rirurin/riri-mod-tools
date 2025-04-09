@@ -71,6 +71,16 @@ impl HookInfo {
     pub(crate) fn new(entries: Vec<(HookConditional, HookEntry)>) -> Self {
         Self(entries)
     }
+
+    pub(crate) fn is_user_defined_init(&self) -> bool {
+        for (_, en) in &self.0 {
+            match en {
+                HookEntry::Delayed => return true,
+                _ => ()
+            }
+        }
+        false
+    }
 }
 
 pub(crate) enum HookItemType {
@@ -111,7 +121,7 @@ pub fn riri_hook_fn_impl(input: TokenStream2, annotated_item: TokenStream2) -> T
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     // Code generation
     let transformed = match transformer.codegen_rust(&mut target) {
         Ok(n) => n,
@@ -120,22 +130,22 @@ pub fn riri_hook_fn_impl(input: TokenStream2, annotated_item: TokenStream2) -> T
     transformed
 }
 
-struct HookFunctionBuildScriptItems {
+struct HookFunctionBuildItemsBase {
     original_function_ptr: syn::ItemStatic,
     set_original_function: syn::ItemFn,
     hooked_function: syn::ItemFn
 }
 
-impl Parse for HookFunctionBuildScriptItems {
+impl Parse for HookFunctionBuildItemsBase {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        Ok(HookFunctionBuildScriptItems {
+        Ok(Self {
             original_function_ptr: input.parse()?,
             set_original_function: input.parse()?,
             hooked_function: input.parse()?,
         })
     }
 }
-impl HookFunctionBuildScriptItems {
+impl HookFunctionBuildItemsBase {
     fn to_items(self) -> Vec<syn::Item> {
         vec![
             syn::Item::Static(self.original_function_ptr),
@@ -145,11 +155,68 @@ impl HookFunctionBuildScriptItems {
     }
 }
 
+struct HookFunctionBuildItemsUser {
+    original_function_ptr: syn::ItemStatic,
+    set_original_function: syn::ItemFn,
+
+    user_global: syn::ItemStatic,
+    user_function: syn::ItemFn,
+
+    hooked_function: syn::ItemFn,
+}
+
+impl Parse for HookFunctionBuildItemsUser {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(Self {
+            original_function_ptr: input.parse()?,
+            set_original_function: input.parse()?,
+            user_global: input.parse()?,
+            user_function: input.parse()?,
+            hooked_function: input.parse()?
+        })
+    }
+}
+
+impl HookFunctionBuildItemsUser {
+    fn to_items(self) -> Vec<syn::Item> {
+        vec![
+            // base
+            syn::Item::Static(self.original_function_ptr),
+            syn::Item::Fn(self.set_original_function),
+            // user
+            syn::Item::Static(self.user_global),
+            syn::Item::Fn(self.user_function),
+            // back to base
+            syn::Item::Fn(self.hooked_function),
+        ]
+    }
+}
+
+pub struct HookFunctionBuildItems;
+impl HookFunctionBuildItems {
+    pub fn get_items_from_tokens(input: TokenStream2, has_user: bool) -> syn::Result<Vec<syn::Item>> {
+        match has_user {
+            true => Ok(HookFunctionBuildItemsUser::parse.parse2(input)?.to_items()),
+            false => Ok(HookFunctionBuildItemsBase::parse.parse2(input)?.to_items()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum SourceFileEvaluationType {
     CFunction(HookInfo),
     Inline(AssemblyFunctionHook),
     InitFunction(String)
+}
+
+impl SourceFileEvaluationType {
+    pub(crate) fn is_user_defined_init(&self) -> bool {
+        match self {
+            Self::CFunction(h) => h.is_user_defined_init(),
+            Self::Inline(h) => h.hook_info.is_user_defined_init(),
+            Self::InitFunction(_) => false
+        }
+    }
 }
 
 pub struct HookBuildScriptResult {
@@ -162,12 +229,13 @@ pub struct HookBuildScriptResult {
 pub fn riri_hook_fn_build(input: TokenStream2, annotated_item: syn::ItemFn) -> syn::Result<HookBuildScriptResult> {
     let mut target = HookItemType::Function(annotated_item);
     let args = SourceFileEvaluationType::CFunction(syn::parse2(input)?);
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     let transformed = transformer.codegen_rust(&mut target)?;
     // parse back into items to inject into file
     Ok(HookBuildScriptResult {
         name: target.get_name(),
-        items: HookFunctionBuildScriptItems::parse.parse2(transformed)?.to_items(),
+        items: HookFunctionBuildItems::get_items_from_tokens(transformed, transformer.is_user_defined())?,
+        // items: HookFunctionBuildScriptItems::parse.parse2(transformed)?.to_items(),
         args
     })
 }
@@ -196,7 +264,7 @@ pub fn riri_hook_static_impl(input: TokenStream2, annotated_item: TokenStream2) 
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     let transformed = match transformer.codegen_rust(&mut target) {
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
@@ -226,7 +294,7 @@ impl HookStaticBuildScriptItems {
 pub fn riri_hook_static_build(input: TokenStream2, annotated_item: syn::ItemMacro) -> syn::Result<HookBuildScriptResult> {
     let mut target = HookItemType::Static(get_riri_hook_macro_inner(annotated_item)?);
     let args = SourceFileEvaluationType::CFunction(syn::parse2(input)?);
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     let transformed = transformer.codegen_rust(&mut target)?;
     Ok(HookBuildScriptResult {
         name: target.get_name(),
@@ -250,7 +318,7 @@ pub fn cpp_class_impl(input: TokenStream2, annotated_item: TokenStream2) -> Toke
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     let transformed = match transformer.codegen_rust(&mut target) {
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
@@ -293,7 +361,7 @@ pub fn riri_hook_inline_fn_impl(input: TokenStream2, annotated_item: TokenStream
         Ok(n) => n,
         Err(e) => return TokenStream2::from(e.to_compile_error())
     };
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     // Code generation
     let transformed = match transformer.codegen_rust(&mut target) {
         Ok(n) => n,
@@ -305,12 +373,52 @@ pub fn riri_hook_inline_fn_impl(input: TokenStream2, annotated_item: TokenStream
 pub fn riri_hook_inline_fn_build(input: TokenStream2, annotated_item: syn::ItemFn) -> syn::Result<HookBuildScriptResult> {
     let mut target = HookItemType::Function(annotated_item);
     let args= SourceFileEvaluationType::Inline(syn::parse2(input)?);
-    let mut transformer = Reloaded2CSharpHook::new();
+    let mut transformer = Reloaded2CSharpHook::new(args.is_user_defined_init());
     let transformed = transformer.codegen_rust(&mut target)?;
     // parse back into items to inject into file
     Ok(HookBuildScriptResult {
         name: target.get_name(),
-        items: HookFunctionBuildScriptItems::parse.parse2(transformed)?.to_items(),
+        items: HookFunctionBuildItems::get_items_from_tokens(transformed, transformer.is_user_defined())?,
+        // items: HookFunctionBuildScriptItems::parse.parse2(transformed)?.to_items(),
         args
     })
+}
+
+pub struct CreateHookParameters {
+    var: syn::Ident,
+    path: syn::Path
+}
+
+impl Parse for CreateHookParameters {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        if !input.peek(syn::Ident) || !input.peek2(Token![,]) {
+            return Err(syn::Error::new(Span2::call_site(), "Incorrect parameters for variable definition in create_hook!"));
+        }
+        let var_name: syn::Ident = input.parse()?;
+        let _comma: Token![,] = input.parse()?;
+        let hook_path: syn::Path = input.parse()?;
+        Ok(Self { var: var_name, path: hook_path })
+    }
+}
+
+impl CreateHookParameters {
+    pub fn as_tokens(&self) -> TokenStream2 {
+        let address_resolve = self.var.clone();
+        let cb_leaf = self.path.segments.last().unwrap().ident.to_string().to_ascii_uppercase();
+        let cb_leaf = Reloaded2CSharpHook::make_user_cb_string(&cb_leaf);
+        let mut cb_path = self.path.clone();
+        cb_path.segments.last_mut().unwrap().ident = syn::Ident::new(&cb_leaf, Span2::call_site());
+        quote! {
+            (#cb_path.get().unwrap())(#address_resolve)
+        }
+    }
+}
+
+// create_hook!
+pub fn create_hook_impl(input: TokenStream2) -> TokenStream2 {
+    let value: CreateHookParameters = match syn::parse2(input) {
+        Ok(v) => v,
+        Err(e) => return TokenStream2::from(e.to_compile_error())
+    };
+    value.as_tokens()
 }

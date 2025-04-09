@@ -404,3 +404,38 @@ impl InitFunction {
         Ok(format!("{}.{}();\n", hooks_class, class_data.get_fn_name()))
     }
 }
+
+pub(crate) struct HookAssignCodegenUserDefined;
+impl HookAssignCodegenUserDefined {
+    pub(crate) fn new() -> Self { Self }
+}
+impl HookAssignCodegen for HookAssignCodegenUserDefined {
+    fn make_single_function_hook_assign<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass, 
+        class: &HookBootstrapFunctionState, delegate_type: &str) 
+        -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        let mut hook_assign = String::new();
+        hook_assign.push_str(&format!("{}.{}(&UserDefined_{});\n",
+            &hooks_class, 
+            Reloaded2CSharpHook::make_user_set_string(&class.fn_name.to_ascii_uppercase()),
+            &class.get_fn_name()
+
+        ));
+        Ok(hook_assign)
+    }
+    fn make_function_hook_assign_assembly<P: AsRef<Path>>(
+        &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass, 
+        class: &HookBootstrapFunctionState, delegate_type: &str,
+        assemble_info: &AssemblyFunctionHookData,
+        cond: &HookConditional) 
+        -> Result<String, Box<dyn Error>> {
+        Ok(String::new())
+    }
+    fn make_single_static_hook_assign<P: AsRef<Path>>(
+            &self, evaluator: &HookEvaluator<P>, ffi: &ReloadedHookClass,
+            state: &HookBootstrapStaticState
+        ) -> Result<String, Box<dyn Error>> {
+        Ok(String::new())
+    }
+}

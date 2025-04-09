@@ -1,4 +1,7 @@
-use crate::riri_hook::{ HookBuildScriptResult, SourceFileEvaluationType };
+use crate::{
+    hook_codegen::Reloaded2CSharpHook,
+    riri_hook::{ HookBuildScriptResult, SourceFileEvaluationType }
+};
 use proc_macro2::{
     Span,
     TokenStream as TokenStream2
@@ -9,12 +12,18 @@ use syn::{
 };
 use quote::quote;
 
-// pub struct InitFunctionParameters {
-//     name: String,
-// }
-
 fn get_transformed_function(func: ItemFn) -> (String, TokenStream2) {
     let name = syn::Ident::new(func.sig.ident.to_string().as_ref(), Span::call_site());
+    /* 
+    // create OnceCell to store original function
+    let fn_name_upper = {
+        let mut s = func.sig.ident.to_string();
+        s.make_ascii_uppercase();
+        s // we're naming globals, so make this uppercase
+    };
+    // let user_fn_name = syn::Ident::new(Reloaded2CSharpHook::make_user_cb_string(&fn_name_upper).as_str(), Span::call_site());
+    // Reloaded2CSharpHook::traverse_statements(&mut func.block.stmts, &user_fn_name);
+    */
     let block = &func.block;
     let fn_target_abi = quote! { extern "C" };
     let tokens = quote! {

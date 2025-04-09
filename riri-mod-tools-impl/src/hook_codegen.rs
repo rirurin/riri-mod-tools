@@ -26,7 +26,10 @@ use crate::{
         CppClassMethods,
         StaticVarHook
     },
-    riri_hook::HookItemType
+    riri_hook::{
+        HookItemType,
+        SourceFileEvaluationType,
+    }
 };
 
 // Code generators
@@ -49,18 +52,12 @@ pub fn make_dummy_item() -> syn::Item {
 }
 
 pub struct Reloaded2CSharpHook {
-    hook_set_name: MaybeUninit<syn::Ident>,
-    r2_hooks_path: MaybeUninit<Box<std::path::PathBuf>>,
-    parameters: Vec<String>,
-    return_type: MaybeUninit<String>
+    is_user_defined_init: bool
 }
 impl Reloaded2CSharpHook {
-    pub fn new() -> Self {
+    pub fn new(is_user_defined_init: bool) -> Self {
         Reloaded2CSharpHook {
-            hook_set_name: MaybeUninit::uninit(),
-            r2_hooks_path: MaybeUninit::uninit(),
-            parameters: vec![], 
-            return_type: MaybeUninit::uninit()
+            is_user_defined_init
         }
     }
     pub const R2_INTEROP_CLASS: &'static str = "Reloaded2Interop";
@@ -68,12 +65,17 @@ impl Reloaded2CSharpHook {
     pub fn make_hook_set_string(s: &str) -> String { format!("__HOOK_SET_{}", s) }
     pub fn make_hook_og_fn_string(s: &str) -> String { format!("__HOOK_OGFN_{}", s) }
     pub fn make_vtbl_ptr_string(s: &str) -> String { format!("__VTBL_PTR_{}", s) }
+    pub fn make_user_cb_string(s: &str) -> String { format!("__USER_{}", s) }
+    pub fn make_user_set_string(s: &str) -> String { format!("__USER_SET_{}", s) }
+    pub fn get_target_abi() -> TokenStream2 { quote! { extern "C" }}
+
+    pub(crate) fn is_user_defined(&self) -> bool { self.is_user_defined_init }
 }
+
 impl Reloaded2CSharpHook {
     fn create_set_function(&mut self, ty: &TokenStream2, set_name: &str, hooked_name: &syn::Ident) -> TokenStream2 {
-        self.hook_set_name.write(syn::Ident::new(Self::make_hook_set_string(set_name).as_str(), hooked_name.span()));
-        let set_cell_fn_name = unsafe { self.hook_set_name.assume_init_ref() };
-        let fn_target_abi = quote! { extern "C" };
+        let set_cell_fn_name = syn::Ident::new(Self::make_hook_set_string(set_name).as_str(), hooked_name.span());
+        let fn_target_abi = Self::get_target_abi(); 
         quote! {
             #[no_mangle]
             #[doc(hidden)]
@@ -82,17 +84,37 @@ impl Reloaded2CSharpHook {
             }
         }
     }
-    fn replace_original_function_unchecked(expr: &syn::ExprMacro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
-        Self::replace_original_function_unchecked_inner(&expr.mac, fn_name)
+
+    fn create_user_set_function(&mut self, set_name: &str, hooked_name: &syn::Ident) -> TokenStream2 {
+        let set_cell_fn_name = syn::Ident::new(Self::make_user_set_string(set_name).as_str(), hooked_name.span());
+        let fn_target_abi = Self::get_target_abi();
+        quote! {
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe #fn_target_abi fn #set_cell_fn_name(cb: extern "C" fn (usize) -> ()) {
+                let _ = #hooked_name.set(cb);
+            }
+        }
     }
-    fn replace_original_function_unchecked_inner(mac: &syn::Macro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
-        if mac.path.is_ident("original_function") {
-            let arg_tokens = &mac.tokens;
+
+    fn replace_original_function_unchecked(expr: &syn::ExprMacro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
+        if expr.mac.path.is_ident("original_function") {
+            let arg_tokens = &expr.mac.tokens;
             Some(Ok(syn::Expr::parse.parse2(quote! { (#fn_name.get().unwrap())(#arg_tokens) }).unwrap()))
         } else {
             None
         }
     }
+
+    fn replace_create_hook_unchecked(expr: &syn::ExprMacro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
+        if expr.mac.path.is_ident("create_hook") {
+            let arg_tokens = &expr.mac.tokens;
+            Some(Ok(syn::Expr::parse.parse2(quote! { (#fn_name.get().unwrap())(#arg_tokens) }).unwrap()))
+        } else {
+            None
+        }
+    }
+
     fn replace_original_function(expr: &syn::ExprMacro, fn_name: &syn::Ident) -> Option<syn::Result<syn::Expr>> {
         if expr.mac.path.is_ident("original_function") {
             let args: Vec<syn::Ident> = 
@@ -109,13 +131,14 @@ impl Reloaded2CSharpHook {
         match expr {
             // Direct invocation
             syn::Expr::Macro(m) => {
-                match Self::replace_original_function_unchecked(&m, fn_name) {
-                    Some(r) => match r {
-                        Ok(v) => *expr = v,
-                        Err(_) => ()
-                    },
-                    None => ()
+                if let Some(r) = Self::replace_original_function_unchecked(&m, fn_name) {
+                    if let Ok(v) = r { *expr = v }
+                } 
+                /* 
+                else if let Some(r) = Self::replace_create_hook_unchecked(&m, fn_name) {
+                    if let Ok(v) = r { *expr = v }
                 }
+                */
             },
             // blocked scope
             syn::Expr::Block(b) => Self::traverse_statements(&mut b.block.stmts, fn_name),
@@ -171,6 +194,7 @@ impl Reloaded2CSharpHook {
             },
             // Method call
             syn::Expr::MethodCall(m) => {
+                Self::traverse_expression(&mut m.receiver, fn_name);
                 for arg in &mut m.args {
                     Self::traverse_expression(arg, fn_name);
                 }
@@ -184,14 +208,18 @@ impl Reloaded2CSharpHook {
                     }
                     Self::traverse_expression(arm.body.as_mut(), fn_name);
                 }
-            }
+            },
+            // Closure
+            syn::Expr::Closure(c) => {
+                Self::traverse_expression(&mut c.body, fn_name);
+            },
             _ => ()
         }
     }
 
     // Search statement list for invocations of original_function! and replace it with our hooked
     // pointer
-    fn traverse_statements(stmts: &mut Vec<syn::Stmt>, fn_name: &syn::Ident) {
+    pub(crate) fn traverse_statements(stmts: &mut Vec<syn::Stmt>, fn_name: &syn::Ident) {
         for stmt in stmts {
             match stmt {
                 syn::Stmt::Local(l) => {
@@ -265,9 +293,26 @@ impl HookFramework for Reloaded2CSharpHook {
         let fn_set_og_tk = self.create_set_function(&fn_ty, &fn_name_upper, &ptr_fn_name);
         Self::traverse_statements(&mut f.block.stmts, &ptr_fn_name);
         let fk = f.to_token_stream();
+
+        // If this function is not hooked at init, but instead by user code (within Rust)
+        // create another global to store the function pointer to call a hook on it
+        let user_tk = if self.is_user_defined_init {
+            let user_fn_name = syn::Ident::new(Self::make_user_cb_string(&fn_name_upper).as_str(), f.span());
+            let user_glb_ty = quote! { extern "C" fn (usize) -> () };
+            let user_glb_tk = quote! {
+                #[doc(hidden)]
+                pub static #user_fn_name: ::std::sync::OnceLock<#user_glb_ty> = ::std::sync::OnceLock::new();
+            };
+            let user_set_tk = self.create_user_set_function(&fn_name_upper, &user_fn_name);
+            quote! {
+                #user_glb_tk
+                #user_set_tk
+            }
+        } else { quote! {} };
         Ok(quote! {
             #fn_og_tk // ItemStatic
             #fn_set_og_tk // ItemFn
+            #user_tk
             #[no_mangle]
             #fk // ItemFn
         })

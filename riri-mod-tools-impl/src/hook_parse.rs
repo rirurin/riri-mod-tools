@@ -233,7 +233,8 @@ impl OffsetBuilder for DynamicOffset {
 #[derive(Debug)]
 pub enum HookEntry {
     Static(StaticOffset),
-    Dyn(DynamicOffset)
+    Dyn(DynamicOffset),
+    Delayed
 }
 
 impl HookEntry {
@@ -243,7 +244,8 @@ impl HookEntry {
                 match v.path.require_ident()?.to_string().as_str() {
                     "dynamic_offset" => Ok(HookEntry::Dyn(DynamicOffset::from_expr_call(&entry)?)),
                     "static_offset" => Ok(HookEntry::Static(StaticOffset::from_expr_call(&entry)?)),
-                    _ => return Err(syn::Error::new(entry.span(), "Unknown entry name (should be static_offset or dynamic_offset)"))
+                    "user_defined" => Ok(HookEntry::Delayed),
+                    _ => return Err(syn::Error::new(entry.span(), "Unknown entry name (should be static_offset, dynamic_offset or user_defined)"))
                 }
             },
             _ => return Err(syn::Error::new(entry.span(), "Should be a name"))
@@ -544,6 +546,12 @@ impl Display for RegistersX86 {
 pub struct AssemblyFunctionHook {
     pub hook_info: HookInfo,
     pub data: Vec<AssemblyFunctionHookData>
+}
+
+impl AssemblyFunctionHook {
+    pub(crate) fn is_user_defined_init(&self) -> bool {
+        self.hook_info.is_user_defined_init()
+    }
 }
 
 impl Parse for AssemblyFunctionHook {

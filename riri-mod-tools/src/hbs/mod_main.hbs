@@ -30,6 +30,7 @@ namespace {{mod_id}}
 	    {{/if}}
 	    private readonly IStartupScanner _startupScanner;
 	    private static nint _baseAddress;
+		private static Mod? _instance;
 
 	    public void SigScan(string pattern, string name, Action<nuint> hookerCb)
 	    {
@@ -76,6 +77,7 @@ namespace {{mod_id}}
 	        {{#each register_hook_fn}}
 	        {{this}}();
 	        {{/each}}
+			_instance = this;
 	    }
 
 	    public override void ConfigurationUpdated(Config configuration)

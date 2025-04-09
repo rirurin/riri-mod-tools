@@ -7,6 +7,7 @@ use crate::{
         HookAssignCodegenStaticOffset,
         HookAssignCodegenDynamicOffset,
         HookAssignCodegenDynamicOffsetSharedScans,
+        HookAssignCodegenUserDefined,
         InitFunction,
         SourceFileEvaluationResult,
         SourceFileEvaluationParamMapEx,
@@ -17,7 +18,13 @@ use crate::{
 use handlebars::Handlebars;
 use riri_mod_tools_impl::{
     csharp::Utils,
-    hook_parse::HookConditional,
+    hook_codegen::Reloaded2CSharpHook,
+    hook_parse::{
+        AssemblyFunctionHook,
+        AssemblyFunctionHookData,
+        HookConditional, 
+        HookEntry 
+    },
     riri_hook::SourceFileEvaluationType
 };
 use std::{
@@ -210,14 +217,14 @@ where P: AsRef<Path>
         ffi: &ReloadedHookClass, 
         class_data: &HookBootstrapFunctionState,
         delegate_type: &str,
-        entry: &riri_mod_tools_impl::hook_parse::HookEntry) 
+        entry: &HookEntry) 
         -> Result<String, Box<dyn Error>> {
         Ok(match entry {
-            riri_mod_tools_impl::hook_parse::HookEntry::Static(s) => {
+            HookEntry::Static(s) => {
                 let res = HookAssignCodegenStaticOffset::new(*s);
                 res.make_single_function_hook_assign(self, ffi, &class_data, &delegate_type)?
             },
-            riri_mod_tools_impl::hook_parse::HookEntry::Dyn(d) => {
+            HookEntry::Dyn(d) => {
                 match d.shared_scan {
                     Some(_) => {
                         self.uses_shared_scans = true;
@@ -229,6 +236,10 @@ where P: AsRef<Path>
                         res.make_single_function_hook_assign(self, ffi, &class_data, &delegate_type)?
                     }
                 }
+            },
+            HookEntry::Delayed => {
+                let res = HookAssignCodegenUserDefined::new();
+                res.make_single_function_hook_assign(self, ffi, &class_data, &delegate_type)?
             }
         })
     }
@@ -237,14 +248,14 @@ where P: AsRef<Path>
         &mut self, 
         ffi: &ReloadedHookClass,
         static_builder: &HookBootstrapStaticState,
-        entry: &riri_mod_tools_impl::hook_parse::HookEntry) 
+        entry: &HookEntry) 
         -> Result<String, Box<dyn Error>> {
         Ok(match entry {
-            riri_mod_tools_impl::hook_parse::HookEntry::Static(s) => {
+            HookEntry::Static(s) => {
                 let res = HookAssignCodegenStaticOffset::new(*s);
                 res.make_single_static_hook_assign(self, ffi, static_builder)?
             },
-            riri_mod_tools_impl::hook_parse::HookEntry::Dyn(d) => {
+            HookEntry::Dyn(d) => {
                 match d.shared_scan {
                     Some(_) => {
                         self.uses_shared_scans = true;
@@ -256,6 +267,10 @@ where P: AsRef<Path>
                         res.make_single_static_hook_assign(self, ffi, static_builder)?
                     }
                 }
+            },
+            HookEntry::Delayed => {
+                let res = HookAssignCodegenUserDefined::new();
+                res.make_single_static_hook_assign(self, ffi, static_builder)?
             }
         })
     }
@@ -356,16 +371,16 @@ where P: AsRef<Path>
         ffi: &ReloadedHookClass, 
         class_data: &HookBootstrapFunctionState,
         delegate_type: &str,
-        hook: &riri_mod_tools_impl::hook_parse::HookEntry,
-        assemble: &riri_mod_tools_impl::hook_parse::AssemblyFunctionHookData,
-        cond: &riri_mod_tools_impl::hook_parse::HookConditional)
+        hook: &HookEntry,
+        assemble: &AssemblyFunctionHookData,
+        cond: &HookConditional)
         -> Result<String, Box<dyn Error>> {
         Ok(match hook {
-            riri_mod_tools_impl::hook_parse::HookEntry::Static(s) => {
+            HookEntry::Static(s) => {
                 let res = HookAssignCodegenStaticOffset::new(*s);
                 res.make_function_hook_assign_assembly(self, ffi, &class_data, &delegate_type, &assemble, cond)?
             },
-            riri_mod_tools_impl::hook_parse::HookEntry::Dyn(d) => {
+            HookEntry::Dyn(d) => {
                 match d.shared_scan {
                     Some(_) => {
                         self.uses_shared_scans = true;
@@ -377,13 +392,17 @@ where P: AsRef<Path>
                         res.make_function_hook_assign_assembly(self, ffi, &class_data, &delegate_type, &assemble, cond)?
                     }
                 }
+            },
+            HookEntry::Delayed => {
+                let res = HookAssignCodegenUserDefined::new();
+                res.make_function_hook_assign_assembly(self, ffi, &class_data, &delegate_type, &assemble, cond)?
             }
         })
     }
 
     fn generate_hook_assembly_function(
         &mut self,
-        hook_parm: &riri_mod_tools_impl::hook_parse::AssemblyFunctionHook,
+        hook_parm: &AssemblyFunctionHook,
         ffi: &ReloadedHookClass,
         class_data: &HookBootstrapFunctionState,
         delegate_type: &str
@@ -400,26 +419,22 @@ where P: AsRef<Path>
             let mut add_ending_brace = true;
             for (i, (hook, asm)) in hook_parm.hook_info.0.iter().zip(hook_parm.data.iter()).enumerate() {
                 match &hook.0 {
-                    riri_mod_tools_impl::hook_parse::HookConditional::None 
-                    => panic!("None is not supported in multi hooks"),
-                    riri_mod_tools_impl::hook_parse::HookConditional::HashNamed(s)
-                    => {
+                    HookConditional::None  => panic!("None is not supported in multi hooks"),
+                    HookConditional::HashNamed(s) => {
                         hook_assign.push_str(&if i == 0 { 
                             self.generate_conditional_first_string(s)
                         } else { 
                             self.generate_conditional_string(s) 
                         });
                     },
-                    riri_mod_tools_impl::hook_parse::HookConditional::HashNum(v)
-                    => {
+                    HookConditional::HashNum(v) => {
                         hook_assign.push_str(&if i == 0 { 
                             self.generate_conditional_first_int(*v) 
                         } else { 
                             self.generate_conditional_int(*v) 
                         });
                     },
-                    riri_mod_tools_impl::hook_parse::HookConditional::Default
-                    => {
+                    HookConditional::Default => {
                         if i > 0 { 
                             hook_assign.push_str(&self.generate_conditional_default());
                         } else { 
@@ -446,6 +461,7 @@ where P: AsRef<Path>
     pub fn generate_hook_bootstrap(&mut self, ffi: &ReloadedHookClass) -> Result<String, Box<dyn Error>> {
         let mut hook_decl = String::new();
         let mut hook_assign = String::new();
+        let mut hook_methods = String::new();
 
         for item in &ffi.eval.file.items {
             match item {
@@ -476,6 +492,28 @@ where P: AsRef<Path>
                                 class_data.get_delegate_path(), class_data.get_fn_name()));
                             hook_assign.push_str(&self.generate_hook_c_function_for_function(
                                 hook_parm, ffi, &class_data, &delegate_type)?);
+                            for (_, en) in &hook_parm.0 {
+                                match en {
+                                    HookEntry::Delayed => {
+                                        hook_methods.push_str("[UnmanagedCallersOnly(CallConvs = [ typeof(System.Runtime.CompilerServices.CallConvStdcall) ])]\n");
+                                        hook_methods.push_str(&format!(
+                                            "\t\tpublic static unsafe void UserDefined_{}(nuint addr)\n", class_data.get_fn_name()));
+                                        hook_methods.push_str("\t\t\x7b\n");
+                                        hook_methods.push_str(&format!(
+                                            "\t\t\t_instance!._{} = _hooks!.CreateHook<{}>({}, (long)addr).Activate();\n",
+                                            class_data.get_fn_name(), class_data.get_delegate_path(), class_data.get_fn_path()));
+                                        hook_methods.push_str(&format!("\t\t\t{}.{}(({})_instance!._{}.OriginalFunctionWrapperAddress);\n",
+                                          class_data.get_class_path(), 
+                                          &Reloaded2CSharpHook::make_hook_set_string(&class_data.get_fn_name().to_ascii_uppercase()),
+                                          delegate_type,
+                                          class_data.get_fn_name()
+                                        ));
+                                        // hook_methods.push_str("\t\t\t// TODO: Create user defined hook method!\n");
+                                        hook_methods.push_str("\t\t\x7d\n");
+                                    },
+                                    _ => ()
+                                }
+                            }
                         },
                         SourceFileEvaluationType::Inline(hook_parm) => {
                             hook_decl.push_str(&format!("private Reloaded.Hooks.Definitions.IAsmHook? _{}_ASM;\n", 
@@ -565,7 +603,9 @@ where P: AsRef<Path>
         out.fmtln(format_args!("public void {}()\n", ffi.csharp_register_hooks()))?;
         out.indent()?;
         out.writeln(&hook_assign);
-        for _ in 0..3 {
+        out.unindent()?;
+        out.writeln(&hook_methods);
+        for _ in 0..2 {
             out.unindent()?;
         }
         Ok(out.submit())
