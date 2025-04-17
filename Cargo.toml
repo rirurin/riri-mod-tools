@@ -1,6 +1,7 @@
 [workspace]
 
 members = [ 
+    "riri-mod-runtime-reloaded", 
     "riri-mod-tools",
     "riri-mod-tools-impl",
     "riri-mod-tools-proc",
@@ -9,10 +10,12 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 authors = [ "Rirurin" ]
 license-file = "LICENSE"
+homepage = "https://riri.wtf"
+repository = "https://github.com/rirurin/riri-mod-tools"
 
 # Optimized Release Build
 [profile.release]

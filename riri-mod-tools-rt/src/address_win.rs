@@ -39,17 +39,19 @@ impl ProcessModule {
         ProcessStatus::GetModuleInformation(
             own, hndl, pinfo.as_mut_ptr(), std::mem::size_of::<ProcessStatus::MODULEINFO>() as u32
         )?;
-        let mut filename_buffer: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
+        // let mut filename_buffer: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
         let hash = match CACHED_EXECUTABLE_HASH.get() {
             Some(v) => *v,
             None => {
+                /* 
                 let path_len = ProcessStatus::GetModuleFileNameExA(Some(own), Some(hndl), filename_buffer.assume_init_mut()); 
                 let exec = std::fs::read(std::str::from_utf8_unchecked(&filename_buffer.assume_init_ref()[..path_len as usize]))?;
                 let hash = XxHash3_64::oneshot(exec.as_slice());
                 // println!("hash: 0x{:x}", hash);
                 let _ = CACHED_EXECUTABLE_HASH.set(hash);
                 hash
-                // 0x7e8170c685f06713
+                */
+                0x7e8170c685f06713
             }
         };
         Ok(ProcessModule {
@@ -168,7 +170,22 @@ impl ProcessInfo {
     pub fn in_executable<T>(&self, ptr: &T) -> bool {
         &raw const *ptr as usize >= self.get_executable_address() &&
         (&raw const *ptr as usize) - self.get_executable_address() < self.get_executable_size()
-        
+    }
+
+    pub fn get_path(&self) -> String {
+        let mut buf: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
+        let path_len = unsafe { ProcessStatus::GetModuleFileNameExA(
+            Some(self.process), 
+            Some(self.executable.handle), 
+            &mut buf.assume_init_mut()[..]) 
+        };
+        let path = unsafe { std::str::from_utf8_unchecked(&buf.assume_init_ref()[..path_len as usize]) };
+        path.to_owned()
+    }
+
+    pub fn get_executable_name(&self) -> String {
+        let full_path = std::path::PathBuf::from(self.get_path());
+        full_path.file_name().unwrap().to_str().unwrap().to_owned()
     }
 }
 

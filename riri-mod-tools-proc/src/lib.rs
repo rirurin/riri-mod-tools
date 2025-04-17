@@ -153,8 +153,8 @@ pub fn interleave_auto(input: TokenStream) -> TokenStream {
     interleave::interleave_auto_impl(input.into()).into()
 }
 
-/// Defines a function that can hook into another function and replace or extend it's
-/// logic by invoking the original_function! macro. 
+/// Defines a function that is called immediately after the module it's defined in is initialized
+/// by the Reloaded mod loader.
 #[proc_macro_attribute]
 pub fn riri_init_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
     riri_init::riri_init_fn_impl(input.into(), annotated_item.into()).into()
@@ -165,4 +165,11 @@ pub fn riri_init_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStr
 #[proc_macro]
 pub fn create_hook(input: TokenStream) -> TokenStream {
     riri_hook::create_hook_impl(input.into()).into()
+}
+
+/// Defines a function that is called when the Reloaded mod loader has finished loading
+/// all other mods.
+#[proc_macro_attribute]
+pub fn riri_mods_loaded_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
+    riri_init::riri_mods_loaded_fn_impl(input.into(), annotated_item.into()).into()
 }

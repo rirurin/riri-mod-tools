@@ -735,12 +735,23 @@ pub struct HashFileEntry {
 }
 
 impl<'a> HashFile<'a> {
+    /// Create a reference to a hash file stored within the mod's data directory ([mod name]/data/hashes.toml)
     pub fn new<T: AsRef<Path>>(base: T, mod_id: &'a str, mod_name: &'a str) -> Result<Self, Box<dyn Error>> {
         let data = base.as_ref().join("data");
         let middata = base.as_ref().join("middata");
         let res = fs::read_to_string(data.join(HASHES_FILENAME))?;
         Ok(HashFile {
             table: res.parse::<toml::Table>()?,
+            middata,
+            data: HashFileData::new(mod_id, mod_name)
+        })
+    }
+    /// Create a reference to the built in hash file provided by riri-mod-tools
+    pub fn new_builtin<T: AsRef<Path>>(base: T, mod_id: &'a str, mod_name: &'a str) -> Result<Self, Box< dyn Error>> {
+        let middata = base.as_ref().join("middata");
+        let res = include_str!("hash/hashes.toml").to_owned();
+        Ok(HashFile {
+            table:res.parse::<toml::Table>()?,
             middata,
             data: HashFileData::new(mod_id, mod_name)
         })

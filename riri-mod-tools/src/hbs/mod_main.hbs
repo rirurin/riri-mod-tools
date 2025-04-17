@@ -7,6 +7,7 @@ using Reloaded.Hooks.ReloadedII.Interfaces;
 using Reloaded.Memory;
 using Reloaded.Memory.SigScan.ReloadedII.Interfaces;
 using Reloaded.Mod.Interfaces;
+using Reloaded.Mod.Interfaces.Internal;
 {{#if uses_shared_scans}}
 using SharedScans.Interfaces;
 {{/if}}
@@ -24,7 +25,7 @@ namespace {{mod_id}}
         private static ILogger? _logger;
         private static IMod? _owner;
         private Config _configuration;
-        private readonly IModConfig _modConfig;
+        private static IModConfig? _modConfig;
 	    {{#if uses_shared_scans}}
 	    private static ISharedScans? _sharedScans;
 	    {{/if}}
@@ -61,8 +62,8 @@ namespace {{mod_id}}
             _owner = context.Owner;
             _configuration = context.Configuration;
             _modConfig = context.ModConfig;
-	    var process = System.Diagnostics.Process.GetCurrentProcess();
-	    if (process == null || process.MainModule == null) throw new Exception("{{mod_name}}: Process is null");
+	    	var process = System.Diagnostics.Process.GetCurrentProcess();
+	    	if (process == null || process.MainModule == null) throw new Exception("{{mod_name}}: Process is null");
 	    	_baseAddress = process.MainModule.BaseAddress;
 
 	        // Register mod interfaces
@@ -73,12 +74,31 @@ namespace {{mod_id}}
 	        {{/if}}
 	        {{utility_namespace}}.set_current_process();
 	        RegisterLogger();
+			RegisterModLoaderAPI();
 	        // Register hooks
 	        {{#each register_hook_fn}}
 	        {{this}}();
 	        {{/each}}
 			_instance = this;
+
+			_modLoader!.OnModLoaderInitialized += OnLoaderInit;
+			_modLoader!.ModLoading += OnModLoading;
 	    }
+
+		private void OnLoaderInit() 
+		{
+			{{#each loader_init_fn}}
+	        {{this}}();
+	        {{/each}}
+
+			_modLoader!.OnModLoaderInitialized -= OnLoaderInit;
+			_modLoader!.ModLoading -= OnModLoading;
+		}
+
+		private void OnModLoading(IModV1 mod, IModConfigV1 conf)
+		{
+			// TODO
+		}
 
 	    public override void ConfigurationUpdated(Config configuration)
         {

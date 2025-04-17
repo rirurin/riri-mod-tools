@@ -206,7 +206,7 @@ impl HookFunctionBuildItems {
 pub enum SourceFileEvaluationType {
     CFunction(HookInfo),
     Inline(AssemblyFunctionHook),
-    InitFunction(String)
+    InitFunction(SourceFileInitializeFunction)
 }
 
 impl SourceFileEvaluationType {
@@ -217,6 +217,30 @@ impl SourceFileEvaluationType {
             Self::InitFunction(_) => false
         }
     }
+}
+
+#[derive(Debug)]
+pub struct SourceFileInitializeFunction {
+    value: String,
+    state: SourceFileInitializeState
+}
+impl SourceFileInitializeFunction {
+    pub fn new(value: String, state: SourceFileInitializeState) -> Self {
+        Self { value, state }
+    }
+    pub fn get_value(&self) -> &str {
+        &self.value
+    }
+    pub fn get_state(&self) -> SourceFileInitializeState {
+        self.state
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SourceFileInitializeState {
+    ModuleLoaded,
+    ModLoaded,
+    ModLoaderInitialized
 }
 
 pub struct HookBuildScriptResult {

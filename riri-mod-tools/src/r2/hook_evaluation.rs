@@ -25,7 +25,10 @@ use riri_mod_tools_impl::{
         HookConditional, 
         HookEntry 
     },
-    riri_hook::SourceFileEvaluationType
+    riri_hook::{
+        SourceFileEvaluationType,
+        SourceFileInitializeState
+    }
 };
 use std::{
     collections::HashMap,
@@ -77,6 +80,23 @@ impl HookSourceFile {
     */
     // TEMP: Rebuild all
     fn file_is_modified(&self, _ot: &Option<SystemTime>) -> bool { true }
+}
+
+#[derive(Debug)]
+pub struct HookEvaluationResult {
+    register_hook_functions: Vec<String>,
+    loader_initialized_functions: Vec<String>
+}
+impl HookEvaluationResult {
+    pub fn new(register_hook_functions: Vec<String>, loader_initialized_functions: Vec<String>) -> Self {
+        Self { register_hook_functions, loader_initialized_functions }
+    }
+    pub fn get_register_hook_functions(&self) -> &[String] {
+        self.register_hook_functions.as_slice()
+    }
+    pub fn get_loader_initialized_functions(&self) -> &[String] {
+        self.loader_initialized_functions.as_slice()
+    }
 }
 
 impl<'a, P> HookEvaluator<'a, P> 
@@ -149,6 +169,7 @@ where P: AsRef<Path>
                     let fn_attr_pos = Self::check_rust_function_for_attribute(f, "riri_hook_fn", &mut fn_attr_defined)?;
                     let fn_inline_attr_pos = Self::check_rust_function_for_attribute(f, "riri_hook_inline_fn", &mut fn_attr_defined)?;
                     let fn_init_pos = Self::check_rust_function_for_attribute(f, "riri_init_fn", &mut fn_attr_defined)?;
+                    let fn_mods_loaded_pos = Self::check_rust_function_for_attribute(f, "riri_mods_loaded_fn", &mut fn_attr_defined)?;
                     if let Some(p) = fn_attr_pos {
                         let insertion = riri_mod_tools_impl::riri_hook::riri_hook_fn_build(
                             f.attrs.remove(p).meta.require_list()?.tokens.clone(),
@@ -164,8 +185,13 @@ where P: AsRef<Path>
                         mutated_items.push((i, insertion));
                     }
                     if let Some(p) = fn_init_pos {
-                        println!("call init script!");
                         let insertion = riri_mod_tools_impl::riri_init::riri_init_fn_build(
+                            f.clone()
+                        )?;
+                        mutated_items.push((i, insertion));
+                    }
+                    if let Some(p) = fn_mods_loaded_pos {
+                        let insertion = riri_mod_tools_impl::riri_init::riri_mods_loaded_fn_build(
                             f.clone()
                         )?;
                         mutated_items.push((i, insertion));
@@ -453,6 +479,29 @@ where P: AsRef<Path>
         Ok(hook_assign)
     }
 
+    pub fn generate_init_function_bootstrap(
+        &self,
+        class_data: &HookBootstrapFunctionState,
+        delegate_type: &str,
+    ) -> String {
+        let mut user_method = String::new();
+        user_method.push_str("[UnmanagedCallersOnly(CallConvs = [ typeof(System.Runtime.CompilerServices.CallConvStdcall) ])]\n");
+        user_method.push_str(&format!(
+            "\t\tpublic static unsafe void UserDefined_{}(nuint addr)\n", class_data.get_fn_name()));
+        user_method.push_str("\t\t\x7b\n");
+        user_method.push_str(&format!(
+            "\t\t\t_instance!._{} = _hooks!.CreateHook<{}>({}, (long)addr).Activate();\n",
+            class_data.get_fn_name(), class_data.get_delegate_path(), class_data.get_fn_path()));
+        user_method.push_str(&format!("\t\t\t{}.{}(({})_instance!._{}.OriginalFunctionWrapperAddress);\n",
+          class_data.get_class_path(), 
+          &Reloaded2CSharpHook::make_hook_set_string(&class_data.get_fn_name().to_ascii_uppercase()),
+          delegate_type,
+          class_data.get_fn_name()
+        ));
+        user_method.push_str("\t\t\x7d\n");
+        user_method
+    }
+
     // - Add an IHook<DelegateType> for the target C# hook
     // - Use the SigScan function to set the value of that C# hook, then get the
     // OriginalFunctionWrapperAddress to pass into the Rust hook set function. The Sigscan will
@@ -462,6 +511,7 @@ where P: AsRef<Path>
         let mut hook_decl = String::new();
         let mut hook_assign = String::new();
         let mut hook_methods = String::new();
+        let mut loader_init_call = String::new();
 
         for item in &ffi.eval.file.items {
             match item {
@@ -494,23 +544,7 @@ where P: AsRef<Path>
                                 hook_parm, ffi, &class_data, &delegate_type)?);
                             for (_, en) in &hook_parm.0 {
                                 match en {
-                                    HookEntry::Delayed => {
-                                        hook_methods.push_str("[UnmanagedCallersOnly(CallConvs = [ typeof(System.Runtime.CompilerServices.CallConvStdcall) ])]\n");
-                                        hook_methods.push_str(&format!(
-                                            "\t\tpublic static unsafe void UserDefined_{}(nuint addr)\n", class_data.get_fn_name()));
-                                        hook_methods.push_str("\t\t\x7b\n");
-                                        hook_methods.push_str(&format!(
-                                            "\t\t\t_instance!._{} = _hooks!.CreateHook<{}>({}, (long)addr).Activate();\n",
-                                            class_data.get_fn_name(), class_data.get_delegate_path(), class_data.get_fn_path()));
-                                        hook_methods.push_str(&format!("\t\t\t{}.{}(({})_instance!._{}.OriginalFunctionWrapperAddress);\n",
-                                          class_data.get_class_path(), 
-                                          &Reloaded2CSharpHook::make_hook_set_string(&class_data.get_fn_name().to_ascii_uppercase()),
-                                          delegate_type,
-                                          class_data.get_fn_name()
-                                        ));
-                                        // hook_methods.push_str("\t\t\t// TODO: Create user defined hook method!\n");
-                                        hook_methods.push_str("\t\t\x7d\n");
-                                    },
+                                    HookEntry::Delayed => hook_methods.push_str(&self.generate_init_function_bootstrap(&class_data, &delegate_type)),
                                     _ => ()
                                 }
                             }
@@ -526,7 +560,13 @@ where P: AsRef<Path>
                                 hook_parm, ffi, &class_data, &delegate_type)?);
                         },
                         SourceFileEvaluationType::InitFunction(hook_parm) => {
-                            hook_assign.push_str(&InitFunction::make_init_function_call::<P>(self, ffi, &class_data, &delegate_type)?);
+                            match hook_parm.get_state() {
+                                SourceFileInitializeState::ModuleLoaded => 
+                                    hook_assign.push_str(&InitFunction::make_init_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
+                                SourceFileInitializeState::ModLoaderInitialized => 
+                                    loader_init_call.push_str(&InitFunction::make_init_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
+                                SourceFileInitializeState::ModLoaded => ()
+                            }
                         }
                     }
                 },
@@ -599,15 +639,20 @@ where P: AsRef<Path>
         out.indent()?;
         out.writeln("public unsafe partial class Mod\n");
         out.indent()?;
+        // class definitions for C-style and assmebly hook storage
         out.writeln(&hook_decl);
+
+        // called when the module is initialized
         out.fmtln(format_args!("public void {}()\n", ffi.csharp_register_hooks()))?;
         out.indent()?;
         out.writeln(&hook_assign);
         out.unindent()?;
         out.writeln(&hook_methods);
-        for _ in 0..2 {
-            out.unindent()?;
-        }
+        // called when mod loader is finished initializing (all mods are loaded) 
+        out.fmtln(format_args!("public void {}()\n", ffi.csharp_mod_loader_init()))?;
+        out.indent()?;
+        out.writeln(&loader_init_call);
+        for _ in 0..3 { out.unindent()?; }
         Ok(out.submit())
     }
 
@@ -618,7 +663,7 @@ where P: AsRef<Path>
 
     pub fn evaluate_hooks(
         &mut self, cb: fn(&mut Self, ReloadedHookClass) -> Result<(), Box<dyn Error>>) 
-        -> Result<Vec<String>, Box<dyn Error>> {
+        -> Result<HookEvaluationResult, Box<dyn Error>> {
         // look for timestamp if it exists
         let timestamp_file = self.middata.join("timestamp");
         let last_build_time = match fs::metadata(&timestamp_file) {
@@ -673,22 +718,22 @@ where P: AsRef<Path>
         }
         // call csbindgen to generate function imports and structs
         let mut call_hook_registers = vec![];
+        let mut loader_initialized_files = vec![];
         for evaluated_file in evaluated_files_full {
-            // call_hook_registers.push_str(&format!("                {}();", evaluated_file.1.csharp_register_hooks()));
             call_hook_registers.push(evaluated_file.1.csharp_register_hooks());
+            loader_initialized_files.push(evaluated_file.1.csharp_mod_loader_init());
             let cs_file = evaluated_file.1.cs_path.to_str().unwrap().to_owned();
             cb(self, evaluated_file.1)?;
             let mut cs_file = fs::OpenOptions::new().append(true).open(cs_file)?;
             cs_file.write(evaluated_file.0.as_bytes())?;
         }
-        Ok(call_hook_registers)
+        Ok(HookEvaluationResult::new(call_hook_registers, loader_initialized_files))
     }
 
-    pub fn generate_mod_main(&self, call_hooks: Vec<String>) -> Result<(), Box<dyn Error>> {
-        pub fn into_toml_array(arr: Vec<String>) -> toml::value::Array {
-            let mut out = toml::value::Array::with_capacity(arr.len());
-            for s in arr { out.push(toml::Value::String(s)); }
-            out
+    pub fn generate_mod_main(&self, evaluation: HookEvaluationResult) -> Result<(), Box<dyn Error>> {
+        pub fn into_toml_array<'a, T>(arr: T) -> toml::value::Array 
+        where T: Into<&'a [String]> {
+            arr.into().iter().map(|s| toml::Value::String(s.to_string())).collect()
         }
 
         let mut mod_file = fs::File::create(self.middata.join("Mod.g.cs"))?;
@@ -709,7 +754,11 @@ where P: AsRef<Path>
         data.insert("utility_namespace".to_owned(), toml::Value::String(self.ffi_utility_class()));
         data.insert("ffi_namespace".to_owned(), toml::Value::String(self.ffi_namespace()));
         data.insert("exports_interfaces".to_owned(), toml::Value::Boolean(false));
-        data.insert("register_hook_fn".to_owned(), toml::Value::Array(into_toml_array(call_hooks)));
+
+        let register_hook_modules = toml::Value::Array(into_toml_array(evaluation.get_register_hook_functions()));
+        let mod_initialized_modules = toml::Value::Array(into_toml_array(evaluation.get_loader_initialized_functions()));
+        data.insert("register_hook_fn".to_owned(), register_hook_modules);
+        data.insert("loader_init_fn".to_owned(), mod_initialized_modules);
         mod_file.write(hbs.render("main", &data)?.as_bytes())?;
         utils_file.write(hbs.render("utils", &data)?.as_bytes())?;
         Ok(())

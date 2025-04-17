@@ -287,7 +287,6 @@ pub unsafe extern "C" fn set_reloaded_logger(cb: LogFn) {
 #[no_mangle]
 pub unsafe extern "C" fn set_reloaded_logger_newline(cb: LogFn) {
     RELOADED_LOGGER_LN.set(cb).unwrap();
-    logln!(Information, "Logger connected! :3");
 }
 
 #[no_mangle]

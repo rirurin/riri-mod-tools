@@ -59,7 +59,6 @@ where P: AsRef<Path>
 }
 
 pub struct ReloadedHookClass {
-    // pub file: syn::File,
     pub eval: SourceFileEvaluationResult,
     pub cs_path: PathBuf,
     pub hash: u64
@@ -71,5 +70,11 @@ impl ReloadedHookClass {
     }
     pub fn csharp_register_hooks(&self) -> String {
         format!("RegisterHooks_{:X}", self.hash)
+    }
+    pub fn csharp_mod_loaded(&self) -> String {
+        format!("ModLoaded_{:X}", self.hash)
+    }
+    pub fn csharp_mod_loader_init(&self) -> String {
+        format!("ModLoaderInit_{:X}", self.hash)
     }
 }
