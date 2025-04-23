@@ -11,6 +11,7 @@ repository.workspace = true
 handlebars = "6.2"
 quote = "1.0"
 riri-mod-tools-impl = { path = "../riri-mod-tools-impl" }
+rkyv = "0.8.10"
 semver = "1.0"
 serde = "1.0"
 simd-json = "0.14"

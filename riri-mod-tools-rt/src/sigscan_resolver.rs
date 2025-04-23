@@ -21,9 +21,28 @@ type CanNull = Option<NonNull<u8>>;
 fn base_address() -> *mut u8 {
     CURRENT_PROCESS.get().unwrap().get_executable_address() as *mut u8
 }
+
+#[allow(dead_code)]
 #[inline(always)]
 fn module_size() -> usize {
     CURRENT_PROCESS.get().unwrap().get_executable_size()
+}
+
+pub trait PointerBounds {
+    unsafe fn in_bounds(p: *mut u8) -> bool;
+}
+pub struct PointerExecutableBound;
+pub struct PointerUnbounded;
+
+impl PointerBounds for PointerExecutableBound {
+    unsafe fn in_bounds(res: *mut u8) -> bool {
+        res > base_address() && res < base_address().add(module_size())
+    }
+}
+impl PointerBounds for PointerUnbounded {
+    unsafe fn in_bounds(res: *mut u8) -> bool {
+        res != std::ptr::null_mut()
+    }
 }
 
 // Set the target process that the DLL is attached to. 
@@ -32,9 +51,10 @@ pub extern "C" fn set_current_process() {
     CURRENT_PROCESS.set(ProcessInfo::get_current_process().unwrap()).unwrap();
 }
 
-unsafe fn deref_int_relative_pointer(p: *mut u8) -> CanNull {
+unsafe fn deref_int_relative_pointer<B>(p: *mut u8) -> CanNull 
+where B: PointerBounds {
     let res = deref_int_relative_pointer_unchecked(p); 
-    if res > base_address() && res < base_address().add(module_size()) {
+    if B::in_bounds(res) {
         Some(NonNull::new(res).unwrap())
     } else {
         None
@@ -48,30 +68,47 @@ unsafe fn deref_int_relative_pointer_unchecked(p: *mut u8) -> *mut u8 {
 
 
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-unsafe fn deref_instruction_pointer_short(p: *mut u8) -> CanNull {
-    try_deref_instruction_pointer(p.offset((*p.add(1) as i8 + 2) as isize))
+unsafe fn deref_instruction_pointer_short<B>(p: *mut u8) -> CanNull 
+where B: PointerBounds {
+    try_deref_instruction_pointer::<B>(p.offset((*p.add(1) as i8 + 2) as isize))
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe fn deref_instruction_pointer_near(p: *mut u8) -> CanNull { 
-    try_deref_instruction_pointer(deref_int_relative_pointer_unchecked(p))
+unsafe fn deref_instruction_pointer_near<B>(p: *mut u8) -> CanNull 
+where B: PointerBounds { 
+    try_deref_instruction_pointer::<B>(deref_int_relative_pointer_unchecked(p))
+}
+
+unsafe fn deref_long_absolute_pointer_unchecked(p: *mut u8) -> *mut u8 {
+    let abs = std::ptr::read_unaligned::<i64>(p as *const i64);
+    abs as *mut u8
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe fn deref_instruction_pointer_long(_p: *mut u8) -> CanNull {
-    todo!("long jump todo! (first byte was 0xff)")
+unsafe fn deref_instruction_pointer_long<B>(p: *mut u8) -> CanNull 
+where B: PointerBounds {
+    try_deref_instruction_pointer::<B>(deref_long_absolute_pointer_unchecked(p))    
 }
 
 #[cfg(target_arch = "x86_64")]
-unsafe fn try_deref_instruction_pointer(p: *mut u8) -> CanNull {
+unsafe fn try_deref_instruction_pointer<B>(p: *mut u8) -> CanNull 
+where B: PointerBounds {
     // If the pointer is outside of the executable, return a null pointer
-    if p >= base_address().add(module_size()) || p < base_address() {
-        return None;
-    }
+    if !B::in_bounds(p) { return None; }
     match *p {
-        0xeb => deref_instruction_pointer_short(p),        
-        0xe9 => deref_instruction_pointer_near(p),
-        0xff => deref_instruction_pointer_long(p),
+        0xeb => deref_instruction_pointer_short::<B>(p),
+        0xe9 => deref_instruction_pointer_near::<B>(p.add(1)),
+        0xff => {
+            // *4 (Jump near, absolute indirect)
+            // *5 (Jump far, absolute indirect)
+            let second_byte = *p.add(1) & 0xf;
+            if second_byte == 5 {
+                // 2 bytes for instruction + 4 bytes for ????
+                deref_instruction_pointer_long::<B>(p.add(6))
+            } else {
+                NonNull::new(p)
+            }
+        },
         _ => NonNull::new(p)
     }
 }
@@ -91,13 +128,7 @@ unsafe fn try_deref_instruction_pointer(p: *mut u8) -> CanNull {
 #[no_mangle]
 pub unsafe extern "C" fn get_address(ofs: usize) -> NonNull<u8> {
     NonNull::new(base_address().add(ofs)).unwrap()
-    // get_address_exec(base_address().add(ofs))
 }
-/*
-unsafe fn get_address_exec(ptr: *mut u8) -> NonNull<u8> {
-    NonNull::new(ptr).unwrap()
-}
-*/
 
 /// Like `get_address`, but contains extra logic to travel through jump instructions until it
 /// reaches a non-jump. As of Reloaded-II's hooking library, hooks crash on thunked functions, so
@@ -106,26 +137,25 @@ unsafe fn get_address_exec(ptr: *mut u8) -> NonNull<u8> {
 /// hooking functions from a vtable pointer.
 #[no_mangle]
 pub unsafe extern "C" fn get_address_may_thunk(ofs: usize) -> CanNull {
-    try_deref_instruction_pointer(base_address().add(ofs))
-    // get_address_may_thunk_exec(base_address().add(ofs))
+    try_deref_instruction_pointer::<PointerUnbounded>(base_address().add(ofs))
 }
-/*
-unsafe fn get_address_may_thunk_exec(ptr: *mut u8) -> CanNull {
-    try_deref_instruction_pointer(ptr)
+
+#[no_mangle]
+pub unsafe extern "C" fn get_address_may_thunk_absolute(addr: usize) -> CanNull {
+    try_deref_instruction_pointer::<PointerUnbounded>(addr as *mut u8)
 }
-*/
 
 /// Function to dereference an arbitrary near pointer, where the pointee is an address within the
 /// memory map of the executable. This is used for instructions where the near pointer starts at
 /// the second byte of the target instruction.
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_short(ofs: usize) -> CanNull {
-    deref_int_relative_pointer(base_address().add(ofs + 1))
+    deref_int_relative_pointer::<PointerUnbounded>(base_address().add(ofs + 1))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_short_abs(addr: *mut u8) -> CanNull {
-    deref_int_relative_pointer(addr.add(1))
+    deref_int_relative_pointer::<PointerUnbounded>(addr.add(1))
 }
 
 /// Function to dereference an arbitrary near pointer, where the pointee is an address within the
@@ -133,12 +163,12 @@ pub unsafe extern "C" fn get_indirect_address_short_abs(addr: *mut u8) -> CanNul
 /// the third byte of the target instruction.
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_short2(ofs: usize) -> CanNull {
-    deref_int_relative_pointer(base_address().add(ofs + 2))
+    deref_int_relative_pointer::<PointerUnbounded>(base_address().add(ofs + 2))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_short2_abs(addr: *mut u8) -> CanNull {
-    deref_int_relative_pointer(addr.add(2))
+    deref_int_relative_pointer::<PointerUnbounded>(addr.add(2))
 }
 
 /// Function to dereference an arbitrary near pointer, where the pointee is an address within the
@@ -146,12 +176,12 @@ pub unsafe extern "C" fn get_indirect_address_short2_abs(addr: *mut u8) -> CanNu
 /// the fourth byte of the target instruction.
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_long(ofs: usize) -> CanNull {
-    deref_int_relative_pointer(base_address().add(ofs + 3))
+    deref_int_relative_pointer::<PointerUnbounded>(base_address().add(ofs + 3))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_long_abs(addr: *mut u8) -> CanNull {
-    deref_int_relative_pointer(addr.add(3))
+    deref_int_relative_pointer::<PointerUnbounded>(addr.add(3))
 }
 
 /// Function to dereference an arbitrary near pointer, where the pointee is an address within the
@@ -159,17 +189,17 @@ pub unsafe extern "C" fn get_indirect_address_long_abs(addr: *mut u8) -> CanNull
 /// the fifth byte of the target instruction.
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_long4(ofs: usize) -> CanNull {
-    deref_int_relative_pointer(base_address().add(ofs + 4))
+    deref_int_relative_pointer::<PointerUnbounded>(base_address().add(ofs + 4))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn get_indirect_address_long4_abs(addr: *mut u8) -> CanNull {
-    deref_int_relative_pointer(addr.add(4))
+    deref_int_relative_pointer::<PointerUnbounded>(addr.add(4))
 }
 
 /// Get the hash of the target executable. Useful for selectively applying signatures by hash
 /// if a signature breaks between game updates
 #[no_mangle]
 pub unsafe extern "C" fn get_executable_hash() -> u64 {
-    CURRENT_PROCESS.get().unwrap().get_executable_hash()
+    crate::address::get_executable_hash_ex()
 }

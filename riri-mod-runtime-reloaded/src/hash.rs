@@ -171,5 +171,8 @@ pub fn set_executable_hash() -> Result<(), Box<dyn Error>> {
 
 #[no_mangle]
 pub unsafe extern "C" fn get_executable_hash_ex() -> u64 {
-    *EXECUTABLE_HASH.get().unwrap()
+    match EXECUTABLE_HASH.get() {
+        Some(v) => *v,
+        None => u64::MAX
+    }
 }

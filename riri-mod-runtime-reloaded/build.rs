@@ -37,7 +37,7 @@ fn copy_to_output<S, T>(src: S, tgt: T) -> Result<(), Box<dyn Error>>
         && filter_entries(f.as_ref().unwrap())) {
         if let Ok(f) = gen_file {
             let path_out = tgt.as_ref().join(&f.path().to_str().unwrap()[src_path_cut..]);
-            println!("Copy file to {:?}", path_out);
+            // println!("Copy file to {:?}", path_out);
             std::fs::copy(&f.path(), &path_out)?;
         }
     }

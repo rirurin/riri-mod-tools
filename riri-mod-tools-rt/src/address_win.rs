@@ -16,6 +16,11 @@ use windows::Win32::{
     }
 };
 
+#[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
+unsafe extern "C" {
+    pub(crate) unsafe fn get_executable_hash_ex() -> u64;
+}
+
 // Based on .NET's System.Diagnostics.Process:
 // https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process
 
@@ -31,7 +36,6 @@ pub struct ProcessModule {
     hash: u64,
 }
 use std::sync::OnceLock;
-static CACHED_EXECUTABLE_HASH: OnceLock<u64> = OnceLock::new();
 
 impl ProcessModule {
     pub unsafe fn new(own: Handle, hndl: Module) -> windows::core::Result<Self> {
@@ -39,26 +43,11 @@ impl ProcessModule {
         ProcessStatus::GetModuleInformation(
             own, hndl, pinfo.as_mut_ptr(), std::mem::size_of::<ProcessStatus::MODULEINFO>() as u32
         )?;
-        // let mut filename_buffer: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
-        let hash = match CACHED_EXECUTABLE_HASH.get() {
-            Some(v) => *v,
-            None => {
-                /* 
-                let path_len = ProcessStatus::GetModuleFileNameExA(Some(own), Some(hndl), filename_buffer.assume_init_mut()); 
-                let exec = std::fs::read(std::str::from_utf8_unchecked(&filename_buffer.assume_init_ref()[..path_len as usize]))?;
-                let hash = XxHash3_64::oneshot(exec.as_slice());
-                // println!("hash: 0x{:x}", hash);
-                let _ = CACHED_EXECUTABLE_HASH.set(hash);
-                hash
-                */
-                0x7e8170c685f06713
-            }
-        };
         Ok(ProcessModule {
             owner: own,
             handle: hndl,
             module_size: pinfo.assume_init_ref().SizeOfImage as usize,
-            hash
+            hash: get_executable_hash_ex()
         })
     }
     pub fn get_base_address(&self) -> usize { self.handle.0 as usize }
