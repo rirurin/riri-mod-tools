@@ -334,6 +334,9 @@ pub mod reloaded2 {
             Ok(())
         }
         pub fn get_mod_id(&self) -> &str { &self.ModId }
+        pub fn get_mod_name(&self) -> &str { &self.ModName }
+        pub fn get_mod_author(&self) -> &str { &self.ModAuthor }
+        pub fn get_mod_version(&self) -> &str { &self.ModVersion }
     }
 
     impl Default for Package {

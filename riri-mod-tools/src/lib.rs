@@ -2,6 +2,7 @@
 pub mod config_codegen;
 pub mod ensure_layout;
 pub mod ensure_layout_tests;
+pub mod git_version;
 pub(crate) mod hbs {
     pub(crate) mod ffi_builtin;
     pub(crate) mod mod_main;

@@ -126,7 +126,9 @@ impl VtableKey {
 }
 
 // const RTTI_CLASS_NAME_PREFIX: &'static str = ".?AV";
+const RTTI_STRUCT_NAME_PREFIX: &'static [u8] = &[0x2e, 0x3f, 0x41, 0x55];
 const RTTI_CLASS_NAME_PREFIX: &'static [u8] = &[0x2e, 0x3f, 0x41, 0x56];
+const RTTI_ENUM_NAME_PREFIX: &'static [u8] = &[0x2e, 0x3f, 0x41, 0x57];
 
 fn generate_vtable_entries(proc: &ProcessInfo) -> VtableEntries {
     let mem = proc.get_process_memory();
@@ -146,7 +148,9 @@ fn generate_vtable_entries(proc: &ProcessInfo) -> VtableEntries {
             if proc.in_executable(type_info) {
                 // Check that TypeInfo + 1 contains the start of an decorated name
                 let name_start = unsafe { std::slice::from_raw_parts((&raw const *type_info).add(1) as *const u8, RTTI_CLASS_NAME_PREFIX.len()) };
-                if name_start == RTTI_CLASS_NAME_PREFIX {
+                if name_start == RTTI_CLASS_NAME_PREFIX 
+                || name_start == RTTI_STRUCT_NAME_PREFIX 
+                || name_start == RTTI_ENUM_NAME_PREFIX {
                     let name = &type_info.get_decorated_name()[RTTI_CLASS_NAME_PREFIX.len() - 1..];
                     let vtable = unsafe { (&raw const *s as *const usize).add(1) } as usize;
                     let vtable = (vtable - slice.as_ptr() as usize + first_offset) as u64;
@@ -180,11 +184,9 @@ pub fn extract_vtables_msvc() -> Result<(), Box<dyn Error>> {
     } else { (VtableRTTICache::new_from_entry(&proc, generate_vtable_entries(&proc)), true) };
     match defs.get(&proc) {
         Some(e) => {
-            /* 
-            for (k, v) in e {
-                logln!(Verbose, "0x{:x} -> {:?}", v, k);
-            }
-            */
+            // for (k, v) in e {
+            //     logln!(Verbose, "0x{:x} -> {:?}", v, k);
+            // }
             let _ = VTABLES_FROM_RTTI.set((*e).clone());
             if regen {
                 let serialized = rkyv::to_bytes::<RkyvError>(&defs)?;
