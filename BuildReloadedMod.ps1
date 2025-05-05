@@ -113,11 +113,16 @@ Split-Path $MyInvocation.MyCommand.Path | Push-Location
 [Environment]::CurrentDirectory = $PWD
 $BASE_PATH = (Get-Location).ToString();
 [System.Environment]::SetEnvironmentVariable("RUST_BACKTRACE", 1)
-[System.Environment]::SetEnvironmentVariable("RUSTFLAGS", "-C panic=abort -C lto=fat -C embed-bitcode=yes -C target_cpu=native")
+[System.Environment]::SetEnvironmentVariable("RUSTFLAGS", "-C panic=abort -C lto=fat -C embed-bitcode=yes -C target-feature=+avx2")
 # set env var for OpenGFD
 SetEnvironmentVariableIfNull -EnvVariable MOD_RUNTIME_PATH -EnvValue (Get-Location).ToString()
 $BASE_DIRECTORY = GetNonNullEnvironmentVariable -EnvVariable MOD_RUNTIME_PATH
 $RELOADED_MOD_DIRECTORY = [IO.Path]::Combine((GetNonNullEnvironmentVariable -EnvVariable RELOADEDIIMODS), $global:RUNTIME_RELOADED_ENTRYPOINT)
+
+# create riri_hook folder if it doesn't already exist
+GoToFolder -Path ([IO.Path]::Combine($BASE_PATH, $global:RUNTIME_RELOADED_ENTRYPOINT))
+if (Test-Path -Path ([IO.Path]::Combine((Get-Location).ToString(), "riri_hook"))) {}
+else { New-Item -ItemType Directory -Force -Path "riri_hook" }
 
 # build Riri Mod Runtime (Rust portion)
 GoToFolder -Path ([IO.Path]::Combine($BASE_DIRECTORY, $global:RUNTIME_RELOADED_CRATE))

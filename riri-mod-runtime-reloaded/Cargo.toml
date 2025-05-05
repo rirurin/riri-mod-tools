@@ -9,6 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+cpp-types = { git = "https://github.com/rirurin/cpp-types" }
 humantime = "2.2.0"
 riri-mod-tools-proc = { path = "../riri-mod-tools-proc" }
 riri-mod-tools-rt = { path = "../riri-mod-tools-rt" }
@@ -32,5 +33,5 @@ features = [
 [build-dependencies]
 toml = "0.8"
 walkdir = "2.5"
-csbindgen = { path = "../../csbindgen/csbindgen" }
+csbindgen = { git = "https://github.com/rirurin/csbindgen", branch = "riri-mod-tools" }
 riri-mod-tools = { path = "../riri-mod-tools" }

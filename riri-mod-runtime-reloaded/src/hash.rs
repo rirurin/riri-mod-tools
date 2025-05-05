@@ -1,5 +1,4 @@
-#![allow(unused_imports)]
-use riri_mod_tools_rt::logln;
+use riri_mod_tools_rt::{ address::ProcessInfo, logln };
 use rkyv::{
     Archive,
     Deserialize,
@@ -13,18 +12,11 @@ use rkyv::{
 };
 use std::{
     error::Error,
-    mem::MaybeUninit,
     path::{ Path, PathBuf },
     sync::OnceLock,
     time::SystemTime
 };
 use twox_hash::XxHash3_64;
-use windows::Win32::{
-    Foundation::{ FILETIME, HMODULE, SYSTEMTIME },
-    Storage::FileSystem,
-    System::{ ProcessStatus, Threading, Time }
-};
-
 
 #[derive(Debug)]
 pub struct WriteTime(SystemTime);
@@ -104,24 +96,7 @@ fn generate_cache<P>(path: P, meta_path: P) -> Result<(), Box<dyn Error>> where 
 }
 
 pub fn set_executable_hash() -> Result<(), Box<dyn Error>> {
-    // Get currently running executable name
-    let curr_handle = unsafe { Threading::GetCurrentProcess() };
-    let mut main_module: MaybeUninit<HMODULE> = MaybeUninit::uninit();
-    let mut mod_sz_total: u32 = 0;
-    unsafe { ProcessStatus::EnumProcessModules(
-        curr_handle, 
-        main_module.as_mut_ptr(), 
-        std::mem::size_of::<HMODULE>() as u32,
-        &raw mut mod_sz_total
-    )? };
-    let main_module = unsafe { main_module.assume_init() };
-    let mut file_path: MaybeUninit<[u8; 260]> = MaybeUninit::uninit();
-    let path_len = unsafe { ProcessStatus::GetModuleFileNameExA(
-        Some(curr_handle), 
-        Some(main_module), 
-        &mut file_path.assume_init_mut()[..]) 
-    };
-    let exe_path = PathBuf::from(unsafe { std::str::from_utf8_unchecked(&file_path.assume_init_ref()[..path_len as usize]) });
+    let exe_path = PathBuf::from(ProcessInfo::get_current_process()?.get_path());
     let fmt_path = exe_path.to_str().unwrap();
     // Check the executable info file to see what the last written time is.
     let mod_dir: String = riri_mod_tools_rt::mod_loader_data::get_directory_for_mod().into();

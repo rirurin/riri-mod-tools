@@ -45,6 +45,10 @@ namespace {{ffi_namespace}}
 		// Executable hash
 		[DllImport(__DllName, EntryPoint = "get_executable_hash", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern ulong get_executable_hash();
+		
+		// Vtable
+		[DllImport(__DllName, EntryPoint = "get_vtable_rtti", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+		internal static extern nuint get_vtable_rtti(nuint name, uint offset);
 
 		// Mod Loader actions (temporary)
 		[DllImport(__DllName, EntryPoint = "set_get_directory_for_mod", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]

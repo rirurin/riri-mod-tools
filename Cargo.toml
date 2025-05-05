@@ -33,3 +33,9 @@ debug = true # Allow us to debug using LLDB
 [profile.release-ltoless]
 inherits = "release"
 lto = false
+
+# [patch."https://github.com/rirurin/cpp-types"]
+# cpp-types = { path = "../cpp-types/cpp-types" }
+
+# [patch."https://github.com/rirurin/csbindgen"]
+# csbindgen = { path = "../csbindgen/csbindgen" }

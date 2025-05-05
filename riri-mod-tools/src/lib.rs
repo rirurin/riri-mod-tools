@@ -16,5 +16,4 @@ pub mod r2 {
 }
 pub mod reloaded_codegen;
 pub mod riri_hook_tests;
-pub mod timestamp;
 pub mod utils;

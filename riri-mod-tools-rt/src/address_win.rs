@@ -200,6 +200,10 @@ impl MemorySection {
     pub fn get_name(&self) -> &str {
         unsafe { std::str::from_utf8_unchecked(self.name.as_slice()) }
     }
+
+    pub fn get_virtual_address(&self) -> *const u8 { self.address }
+
+    pub fn get_size(&self) -> usize { self.size }
 }
 
 impl Debug for MemorySection {

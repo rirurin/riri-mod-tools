@@ -11,3 +11,4 @@ pub mod interleave;
 pub mod logger;
 pub mod mod_loader_data;
 pub mod sigscan_resolver;
+pub mod vtable;
