@@ -42,6 +42,9 @@ namespace {{ffi_namespace}}
 		[DllImport(__DllName, EntryPoint = "set_reloaded_logger_newline", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
 
+		[DllImport(__DllName, EntryPoint = "set_logger_color", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+		internal static extern bool set_logger_color(nint colorName);
+
 		// Executable hash
 		[DllImport(__DllName, EntryPoint = "get_executable_hash", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern ulong get_executable_hash();
@@ -56,6 +59,10 @@ namespace {{ffi_namespace}}
 
 		[DllImport(__DllName, EntryPoint = "set_free_csharp_string", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern nuint set_free_csharp_string(delegate* unmanaged[Stdcall]<nint, void> offset);
+
+		// Stack Trace builder
+		[DllImport(__DllName, EntryPoint = "set_get_stack_trace", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+		internal static extern void set_get_stack_trace(delegate* unmanaged[Stdcall]<nint> offset);
     }
 }
 
@@ -79,6 +86,11 @@ namespace {{mod_id}}
 		{
 		    {{utility_namespace}}.set_reloaded_logger(&ReloadedLoggerWrite);
 		    {{utility_namespace}}.set_reloaded_logger_newline(&ReloadedLoggerWriteLine);
+			var LoggerColorString = Marshal.StringToHGlobalAnsi("{{logger_color}}");
+			if (!{{utility_namespace}}.set_logger_color(LoggerColorString)) {
+				throw new Exception("{{logger_color}} is not a valid color name or hex code!");
+			}
+			Marshal.FreeHGlobal(LoggerColorString);
 		}
 
 		public void RegisterModLoaderAPI()

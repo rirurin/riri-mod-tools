@@ -742,6 +742,10 @@ where P: AsRef<Path>
             Some(v) => v.to_owned(),
             None => self.package.get_mod_id().to_owned()
         };
+        let logger_color = match &self.package.LoggerColor {
+            Some(v) => v.to_owned(),
+            None => format!("LimeGreen")
+        };
         let mut hbs = Handlebars::new();
         hbs.register_template_string("main", crate::hbs::mod_main::FILE)?;
         hbs.register_template_string("utils", crate::hbs::ffi_builtin::FILE)?;
@@ -750,6 +754,7 @@ where P: AsRef<Path>
         data.insert("mod_name".to_owned(), toml::Value::String(self.package.Name.to_owned()));
         data.insert("dll_name".to_owned(), toml::Value::String(self.get_output_dll_name()?));
         data.insert("logger_prefix".to_owned(), toml::Value::String(logger_prefix));
+        data.insert("logger_color".to_owned(), toml::Value::String(logger_color));
         data.insert("uses_shared_scans".to_owned(), toml::Value::Boolean(self.uses_shared_scans));
         data.insert("utility_namespace".to_owned(), toml::Value::String(self.ffi_utility_class()));
         data.insert("ffi_namespace".to_owned(), toml::Value::String(self.ffi_namespace()));

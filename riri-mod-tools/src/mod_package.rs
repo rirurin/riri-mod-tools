@@ -93,6 +93,7 @@ pub mod reloaded3ririext {
         pub Id: String,
         pub Reloaded2Id: Option<String>, // NOT IN SPEC
         pub LoggerPrefix: Option<String>, // NOT IN SPEC
+        pub LoggerColor: Option<String>, // NOT IN SPEC
         pub Name: String,
         pub Author: String,
         pub Summary: Option<String>, // is required

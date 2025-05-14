@@ -1,6 +1,7 @@
 Id = "reloaded3.api.modruntime.riri"
 Reloaded2Id = "riri.modruntime"
 LoggerPrefix = "Riri Mod Runtime"
+LoggerColor = "PaleVioletRed"
 Name = "Riri Mod Runtime"
 Author = "Rirurin"
 PackageType = "Mod"

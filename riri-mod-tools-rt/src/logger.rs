@@ -1,12 +1,17 @@
 #![allow(dead_code, unused_macros)]
-use std::sync::OnceLock;
+use std::{
+    error::Error,
+    ffi::CStr,
+    fmt::Display,
+    sync::OnceLock
+};
 
 /// Defines a color which can be used to set the color that a message will be printed as in the
 /// Reloaded console output. Designed to closely represent C#'s Color type in
 /// System.Drawing.Primitives:
 /// https://github.com/dotnet/runtime/blob/main/src/libraries/System.Drawing.Primitives/src/System/Drawing/Color.cs
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LogColor(u32);
 
 impl LogColor {
@@ -172,6 +177,176 @@ pub mod builtin_colors {
     pub const YELLOWGREEN: super::LogColor = super::LogColor::from_argb_u32(0xFF9ACD32);
 }
 
+#[derive(Debug)]
+pub struct LogColorParseError;
+impl Error for LogColorParseError {}
+impl Display for LogColorParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LogColorParseError")
+    }
+}
+
+impl TryFrom<&str> for LogColor {
+    type Error = LogColorParseError;
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let value = value.to_ascii_uppercase();
+        match value.as_str() {
+            "TRANSPARENT" => Ok(builtin_colors::TRANSPARENT),
+            "ALICEBLUE" => Ok(builtin_colors::ALICEBLUE),
+            "ANTIQUEWHITE" => Ok(builtin_colors::ANTIQUEWHITE),
+            "AQUA" => Ok(builtin_colors::AQUA),
+            "AQUAMARINE" => Ok(builtin_colors::AQUAMARINE),
+            "AZURE" => Ok(builtin_colors::AZURE),
+            "BEIGE" => Ok(builtin_colors::BEIGE),
+            "BISQUE" => Ok(builtin_colors::BISQUE),
+            "BLACK" => Ok(builtin_colors::BLACK),
+            "BLANCHEDALMOND" => Ok(builtin_colors::BLANCHEDALMOND),
+            "BLUE" => Ok(builtin_colors::BLUE),
+            "BLUEVIOLET" => Ok(builtin_colors::BLUEVIOLET),
+            "BROWN" => Ok(builtin_colors::BROWN),
+            "BURLYWOOD" => Ok(builtin_colors::BURLYWOOD),
+            "CADETBLUE" => Ok(builtin_colors::CADETBLUE),
+            "CHARTREUSE" => Ok(builtin_colors::CHARTREUSE),
+            "CHOCOLATE" => Ok(builtin_colors::CHOCOLATE),
+            "CORAL" => Ok(builtin_colors::CORAL),
+            "CORNFLOWERBLUE" => Ok(builtin_colors::CORNFLOWERBLUE),
+            "CORNSILK" => Ok(builtin_colors::CORNSILK),
+            "CRIMSON" => Ok(builtin_colors::CRIMSON),
+            "CYAN" => Ok(builtin_colors::CYAN),
+            "DARKBLUE" => Ok(builtin_colors::DARKBLUE),
+            "DARKCYAN" => Ok(builtin_colors::DARKCYAN),
+            "DARKGOLDENROD" => Ok(builtin_colors::DARKGOLDENROD),
+            "DARKGRAY" => Ok(builtin_colors::DARKGRAY),
+            "DARKGREEN" => Ok(builtin_colors::DARKGREEN),
+            "DARKKHAKI" => Ok(builtin_colors::DARKKHAKI),
+            "DARKMAGENTA" => Ok(builtin_colors::DARKMAGENTA),
+            "DARKOLIVEGREEN" => Ok(builtin_colors::DARKOLIVEGREEN),
+            "DARKORANGE" => Ok(builtin_colors::DARKORANGE),
+            "DARKORCHID" => Ok(builtin_colors::DARKORCHID),
+            "DARKRED" => Ok(builtin_colors::DARKRED),
+            "DARKSALMON" => Ok(builtin_colors::DARKSALMON),
+            "DARKSEAGREEN" => Ok(builtin_colors::DARKSEAGREEN),
+            "DARKSLATEBLUE" => Ok(builtin_colors::DARKSLATEBLUE),
+            "DARKSLATEGRAY" => Ok(builtin_colors::DARKSLATEGRAY),
+            "DARKTURQUOISE" => Ok(builtin_colors::DARKTURQUOISE),
+            "DARKVIOLET" => Ok(builtin_colors::DARKVIOLET),
+            "DEEPPINK" => Ok(builtin_colors::DEEPPINK),
+            "DEEPSKYBLUE" => Ok(builtin_colors::DEEPSKYBLUE),
+            "DIMGRAY" => Ok(builtin_colors::DIMGRAY),
+            "DODGERBLUE" => Ok(builtin_colors::DODGERBLUE),
+            "FIREBRICK" => Ok(builtin_colors::FIREBRICK),
+            "FLORALWHITE" => Ok(builtin_colors::FLORALWHITE),
+            "FORESTGREEN" => Ok(builtin_colors::FORESTGREEN),
+            "FUCHSIA" => Ok(builtin_colors::FUCHSIA),
+            "GAINSBORO" => Ok(builtin_colors::GAINSBORO),
+            "GHOSTWHITE" => Ok(builtin_colors::GHOSTWHITE),
+            "GOLD" => Ok(builtin_colors::GOLD),
+            "GOLDENROD" => Ok(builtin_colors::GOLDENROD),
+            "GRAY" => Ok(builtin_colors::GRAY),
+            "GREEN" => Ok(builtin_colors::GREEN),
+            "GREENYELLOW" => Ok(builtin_colors::GREENYELLOW),
+            "HONEYDEW" => Ok(builtin_colors::HONEYDEW),
+            "HOTPINK" => Ok(builtin_colors::HOTPINK),
+            "INDIANRED" => Ok(builtin_colors::INDIANRED),
+            "INDIGO" => Ok(builtin_colors::INDIGO),
+            "IVORY" => Ok(builtin_colors::IVORY),
+            "KHAKI" => Ok(builtin_colors::KHAKI),
+            "LAVENDER" => Ok(builtin_colors::LAVENDER),
+            "LAVENDERBLUSH" => Ok(builtin_colors::LAVENDERBLUSH),
+            "LAWNGREEN" => Ok(builtin_colors::LAWNGREEN),
+            "LEMONCHIFFON" => Ok(builtin_colors::LEMONCHIFFON),
+            "LIGHTBLUE" => Ok(builtin_colors::LIGHTBLUE),
+            "LIGHTCORAL" => Ok(builtin_colors::LIGHTCORAL),
+            "LIGHTCYAN" => Ok(builtin_colors::LIGHTCYAN),
+            "LIGHTGOLDENRODYELLOW" => Ok(builtin_colors::LIGHTGOLDENRODYELLOW),
+            "LIGHTGRAY" => Ok(builtin_colors::LIGHTGRAY),
+            "LIGHTGREEN" => Ok(builtin_colors::LIGHTGREEN),
+            "LIGHTPINK" => Ok(builtin_colors::LIGHTPINK),
+            "LIGHTSALMON" => Ok(builtin_colors::LIGHTSALMON),
+            "LIGHTSEAGREEN" => Ok(builtin_colors::LIGHTSEAGREEN),
+            "LIGHTSKYBLUE" => Ok(builtin_colors::LIGHTSKYBLUE),
+            "LIGHTSLATEGRAY" => Ok(builtin_colors::LIGHTSLATEGRAY),
+            "LIGHTSTEELBLUE" => Ok(builtin_colors::LIGHTSTEELBLUE),
+            "LIGHTYELLOW" => Ok(builtin_colors::LIGHTYELLOW),
+            "LIME" => Ok(builtin_colors::LIME),
+            "LIMEGREEN" => Ok(builtin_colors::LIMEGREEN),
+            "LINEN" => Ok(builtin_colors::LINEN),
+            "MAGENTA" => Ok(builtin_colors::MAGENTA),
+            "MAROON" => Ok(builtin_colors::MAROON),
+            "MEDIUMAQUAMARINE" => Ok(builtin_colors::MEDIUMAQUAMARINE),
+            "MEDIUMBLUE" => Ok(builtin_colors::MEDIUMBLUE),
+            "MEDIUMORCHID" => Ok(builtin_colors::MEDIUMORCHID),
+            "MEDIUMPURPLE" => Ok(builtin_colors::MEDIUMPURPLE),
+            "MEDIUMSEAGREEN" => Ok(builtin_colors::MEDIUMSEAGREEN),
+            "MEDIUMSLATEBLUE" => Ok(builtin_colors::MEDIUMSLATEBLUE),
+            "MEDIUMSPRINGGREEN" => Ok(builtin_colors::MEDIUMSPRINGGREEN),
+            "MEDIUMTURQUOISE" => Ok(builtin_colors::MEDIUMTURQUOISE),
+            "MEDIUMVIOLETRED" => Ok(builtin_colors::MEDIUMVIOLETRED),
+            "MIDNIGHTBLUE" => Ok(builtin_colors::MIDNIGHTBLUE),
+            "MINTCREAM" => Ok(builtin_colors::MINTCREAM),
+            "MISTYROSE" => Ok(builtin_colors::MISTYROSE),
+            "MOCCASIN" => Ok(builtin_colors::MOCCASIN),
+            "NAVAJOWHITE" => Ok(builtin_colors::NAVAJOWHITE),
+            "NAVY" => Ok(builtin_colors::NAVY),
+            "OLDLACE" => Ok(builtin_colors::OLDLACE),
+            "OLIVE" => Ok(builtin_colors::OLIVE),
+            "OLIVEDRAB" => Ok(builtin_colors::OLIVEDRAB),
+            "ORANGE" => Ok(builtin_colors::ORANGE),
+            "ORANGERED" => Ok(builtin_colors::ORANGERED),
+            "ORCHID" => Ok(builtin_colors::ORCHID),
+            "PALEGOLDENROD" => Ok(builtin_colors::PALEGOLDENROD),
+            "PALEGREEN" => Ok(builtin_colors::PALEGREEN),
+            "PALETURQUOISE" => Ok(builtin_colors::PALETURQUOISE),
+            "PALEVIOLETRED" => Ok(builtin_colors::PALEVIOLETRED),
+            "PAPAYAWHIP" => Ok(builtin_colors::PAPAYAWHIP),
+            "PEACHPUFF" => Ok(builtin_colors::PEACHPUFF),
+            "PERU" => Ok(builtin_colors::PERU),
+            "PINK" => Ok(builtin_colors::PINK),
+            "PLUM" => Ok(builtin_colors::PLUM),
+            "POWDERBLUE" => Ok(builtin_colors::POWDERBLUE),
+            "PURPLE" => Ok(builtin_colors::PURPLE),
+            "REBECCAPURPLE" => Ok(builtin_colors::REBECCAPURPLE),
+            "RED" => Ok(builtin_colors::RED),
+            "ROSYBROWN" => Ok(builtin_colors::ROSYBROWN),
+            "ROYALBLUE" => Ok(builtin_colors::ROYALBLUE),
+            "SADDLEBROWN" => Ok(builtin_colors::SADDLEBROWN),
+            "SALMON" => Ok(builtin_colors::SALMON),
+            "SANDYBROWN" => Ok(builtin_colors::SANDYBROWN),
+            "SEAGREEN" => Ok(builtin_colors::SEAGREEN),
+            "SEASHELL" => Ok(builtin_colors::SEASHELL),
+            "SIENNA" => Ok(builtin_colors::SIENNA),
+            "SILVER" => Ok(builtin_colors::SILVER),
+            "SKYBLUE" => Ok(builtin_colors::SKYBLUE),
+            "SLATEBLUE" => Ok(builtin_colors::SLATEBLUE),
+            "SLATEGRAY" => Ok(builtin_colors::SLATEGRAY),
+            "SNOW" => Ok(builtin_colors::SNOW),
+            "SPRINGGREEN" => Ok(builtin_colors::SPRINGGREEN),
+            "STEELBLUE" => Ok(builtin_colors::STEELBLUE),
+            "TAN" => Ok(builtin_colors::TAN),
+            "TEAL" => Ok(builtin_colors::TEAL),
+            "THISTLE" => Ok(builtin_colors::THISTLE),
+            "TOMATO" => Ok(builtin_colors::TOMATO),
+            "TURQUOISE" => Ok(builtin_colors::TURQUOISE),
+            "VIOLET" => Ok(builtin_colors::VIOLET),
+            "WHEAT" => Ok(builtin_colors::WHEAT),
+            "WHITE" => Ok(builtin_colors::WHITE),
+            "WHITESMOKE" => Ok(builtin_colors::WHITESMOKE),
+            "YELLOW" => Ok(builtin_colors::YELLOW),
+            "YELLOWGREEN" => Ok(builtin_colors::YELLOWGREEN),
+            x => {
+                if x.starts_with("0x") {
+                    match u32::from_str_radix(&x[2..], 16) {
+                        Ok(v) => Ok(LogColor::from_argb_u32(v)),
+                        Err(_) => Err(LogColorParseError)
+                    }
+                } else {
+                    Err(LogColorParseError)
+                }
+            }
+        }
+    }
+}
+
 /// Defines levels 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
@@ -200,14 +375,14 @@ impl LogLevel {
         match self {
             Self::Verbose |
             Self::Debug |
-            Self::Information => GLOBAL_LOG_COLOR,
+            Self::Information => *GLOBAL_LOG_COLOR.get().unwrap(),
             Self::Warning => builtin_colors::SANDYBROWN,
             Self::Error => builtin_colors::RED
         }
     }
 }
 
-pub static GLOBAL_LOG_COLOR: LogColor = builtin_colors::LIMEGREEN;
+pub static GLOBAL_LOG_COLOR: OnceLock<LogColor> = OnceLock::new();
 pub static GLOBAL_LOG_LEVEL: LogLevel = LogLevel::Verbose;
 
 #[macro_export]
@@ -219,7 +394,7 @@ macro_rules! log {
             let thread_id = $crate::address::get_thread_id();
             let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color(), $crate::logger::LogLevel::$ty);
+                $crate::logger::invoke_reloaded_logger(text.as_ptr(), text.len(), $crate::logger::LogLevel::$ty.get_log_color(), $crate::logger::LogLevel::$ty);
             }
         }
     };
@@ -245,7 +420,7 @@ macro_rules! logln {
             let thread_id = $crate::address::get_thread_id();
             let text: String = $crate::logger::transform_text(format!($($fmt)*), file, line, thread_id);
             unsafe {
-                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::GLOBAL_LOG_LEVEL.get_log_color(), $crate::logger::LogLevel::$ty);
+                $crate::logger::invoke_reloaded_logger_newline(text.as_ptr(), text.len(), $crate::logger::LogLevel::$ty.get_log_color(), $crate::logger::LogLevel::$ty);
             }
         }
     };
@@ -297,4 +472,16 @@ pub unsafe extern "C" fn invoke_reloaded_logger(p: *const u8, len: usize, c: Log
 #[no_mangle]
 pub unsafe extern "C" fn invoke_reloaded_logger_newline(p: *const u8, len: usize, c: LogColor, level: LogLevel) {
     (RELOADED_LOGGER_LN.get().unwrap())(p, len, c, level);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn set_logger_color(name: *const i8) -> bool {
+    let name = CStr::from_ptr(name).to_str().unwrap();
+    match name.try_into() {
+        Ok(v) => {
+            let _ = GLOBAL_LOG_COLOR.set(v);
+            true
+        },
+        Err(_) => false
+    }
 }
