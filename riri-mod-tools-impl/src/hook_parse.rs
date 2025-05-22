@@ -297,6 +297,69 @@ impl ToTokens for StaticVarHook {
     fn to_tokens(&self, tokens: &mut TokenStream2) {}
 }
 
+// #[derive(Debug)]
+pub struct HookInfoMultipleCaseCollector {
+    arms: Vec<syn::Arm>,
+    has_default_arm: bool,
+}
+
+impl HookInfoMultipleCaseCollector {
+    pub fn new(entries: syn::parse::ParseBuffer<'_>) -> syn::Result<Self> {
+        let mut arms: Vec<syn::Arm> = vec![];
+        while !entries.is_empty() {
+            arms.push(entries.parse()?);
+        }
+        Ok(Self { arms, has_default_arm: false })
+    }
+
+    pub fn collect_patterns(&mut self) -> syn::Result<Vec<(HookConditional, HookEntry)>> {
+        let mut patterns: Vec<(HookConditional, HookEntry)> = vec![];
+        for arm in &self.arms {
+            if self.has_default_arm {
+                return Err(syn::Error::new(arm.span(), "Default arm must be the last arm"));
+            }
+            let entry = match arm.body.borrow() {
+                syn::Expr::Call(c) => c,
+                _ => return Err(syn::Error::new(arm.span(), "Invalid hook entry format"))
+            };
+            let mut has_default_arm = self.has_default_arm;
+            patterns.extend(self.collect_patterns_inner(&arm.pat, entry, &mut has_default_arm)?);
+            if has_default_arm { self.has_default_arm = has_default_arm }
+        }
+        Ok(patterns)
+    }
+
+    fn collect_patterns_inner(&self, pat: &syn::Pat, entry: &syn::ExprCall, default_arm: &mut bool) -> syn::Result<Vec<(HookConditional, HookEntry)>> {
+        if *default_arm {
+            return Err(syn::Error::new(Span2::call_site(), "Default arm must be the last arm"));
+        }
+        match pat {
+            syn::Pat::Ident(v) => Ok(vec![(HookConditional::HashNamed(v.ident.to_string()), HookEntry::new(entry)?)]),
+            syn::Pat::Lit(l) => {
+                if let syn::Lit::Int(i) = &l.lit {
+                    Ok(vec![(HookConditional::HashNum(i.base10_parse::<u64>()?), HookEntry::new(entry)?)])
+                } else {
+                    Err(syn::Error::new(Span2::call_site(), "Only integer literals are allowed"))
+                }
+            },
+            syn::Pat::Or(o) => {
+                let mut vars = vec![];
+                for c in &o.cases { 
+                    vars.extend(self.collect_patterns_inner(c, entry, default_arm)?);
+                }
+                // println!("{:?}", vars);
+                // panic!("OR WAS CALLED!");
+                Ok(vars)
+            },
+            syn::Pat::Wild(w) => {
+                *default_arm = true;
+                Ok(vec![(HookConditional::Default, HookEntry::new(entry)?)])
+            },
+            _ => Err(syn::Error::new(Span2::call_site(), "Unimplemented match pattern"))
+        }
+    }
+}
+
 impl Parse for HookInfo {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         // #[riri_hook_fn(static_offset(...))]
@@ -314,37 +377,8 @@ impl Parse for HookInfo {
         } else if input.peek(syn::token::Brace) { // multiple entries
             let entries;
             syn::braced!(entries in input);
-            let mut arms: Vec<syn::Arm> = vec![];
-            while !entries.is_empty() {
-                arms.push(entries.parse()?);
-            }
-            let mut has_default_arm = false;
-            for arm in &arms {
-                if has_default_arm {
-                    return Err(syn::Error::new(arm.span(), "Default arm must be the last arm"));
-                }
-                let entry = match arm.body.borrow() {
-                    syn::Expr::Call(c) => c,
-                    _ => return Err(syn::Error::new(arm.span(), "Invalid hook entry format"))
-                };
-                match &arm.pat {
-                    syn::Pat::Ident(v) => {
-                        hook_var.push((HookConditional::HashNamed(v.ident.to_string()), HookEntry::new(&entry)?))
-                    },
-                    syn::Pat::Lit(l) => {
-                        if let syn::Lit::Int(i) =  &l.lit {
-                            hook_var.push((HookConditional::HashNum(i.base10_parse::<u64>()?), HookEntry::new(&entry)?))
-                        } else {
-                            return Err(syn::Error::new(arm.span(), "Only integer literals are allowed"));
-                        }
-                    },
-                    syn::Pat::Wild(w) => {
-                        has_default_arm = true;
-                        hook_var.push((HookConditional::Default, HookEntry::new(&entry)?))
-                    },
-                    _ => return Err(syn::Error::new(arm.span(), "Unimplemented match pattern"))
-                }
-            }
+            let mut collector = HookInfoMultipleCaseCollector::new(entries)?;
+            hook_var.extend(collector.collect_patterns()?);
         } else {
             return Err(syn::Error::new(input.span(), "Invalid macro structure (should be either like a function call or match arms)"))
         }
