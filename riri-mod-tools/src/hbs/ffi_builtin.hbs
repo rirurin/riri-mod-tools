@@ -2,6 +2,7 @@
 // DO NOT EDIT THIS. It will get overwritten if you rebuild {{mod_name}}!
 // (btw, please keep this in sync with extern definitions in riri-mod-tools-rt! ^^;)
 
+using Reloaded.Memory.Sigscan;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -61,8 +62,12 @@ namespace {{ffi_namespace}}
 		internal static extern nuint set_free_csharp_string(delegate* unmanaged[Stdcall]<nint, void> offset);
 
 		// Stack Trace builder
-		[DllImport(__DllName, EntryPoint = "set_get_stack_trace", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-		internal static extern void set_get_stack_trace(delegate* unmanaged[Stdcall]<nint> offset);
+		// [DllImport(__DllName, EntryPoint = "set_get_stack_trace", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+		// internal static extern void set_get_stack_trace(delegate* unmanaged[Stdcall]<nint> offset);
+
+		// Arbitrary Signature Scanning
+		[DllImport(__DllName, EntryPoint = "set_find_pattern", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+		internal static extern void set_find_pattern(delegate* unmanaged[Stdcall]<nint, nint, int, nint> offset);
     }
 }
 
@@ -97,6 +102,7 @@ namespace {{mod_id}}
 		{
 			{{utility_namespace}}.set_get_directory_for_mod(&GetDirectoryForMod);
 			{{utility_namespace}}.set_free_csharp_string(&FreeCSharpString);
+			{{utility_namespace}}.set_find_pattern(&FindPattern);
 		}
 
 		[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
@@ -110,6 +116,20 @@ namespace {{mod_id}}
 		public static unsafe void FreeCSharpString(nint p)
 		{
 			Marshal.FreeHGlobal(p);
+		}
+
+		[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
+		public static unsafe nint FindPattern(nint pat, nint start, int len)
+		{
+			var scanner = new Scanner((byte*)start, len);
+			var result = scanner.FindPattern(Marshal.PtrToStringUTF8(pat));
+			if (result.Found)
+			{
+				return start + result.Offset;
+			} else 
+			{
+				return nint.Zero;
+			}
 		}
     }
 }

@@ -375,7 +375,10 @@ impl LogLevel {
         match self {
             Self::Verbose |
             Self::Debug |
-            Self::Information => *GLOBAL_LOG_COLOR.get().unwrap(),
+            Self::Information => match GLOBAL_LOG_COLOR.get() {
+                Some(c) => *c,
+                None => builtin_colors::LIMEGREEN
+            },
             Self::Warning => builtin_colors::SANDYBROWN,
             Self::Error => builtin_colors::RED
         }

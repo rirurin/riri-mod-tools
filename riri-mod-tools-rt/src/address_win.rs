@@ -52,6 +52,7 @@ impl ProcessModule {
     }
     pub fn get_base_address(&self) -> usize { self.handle.0 as usize }
     pub fn get_memory_size(&self) -> usize { self.module_size }
+    pub fn as_raw(&self) -> Module { self.handle }
 }
 
 #[derive(Debug, Clone)]
@@ -176,6 +177,7 @@ impl ProcessInfo {
         let full_path = std::path::PathBuf::from(self.get_path());
         full_path.file_name().unwrap().to_str().unwrap().to_owned()
     }
+    pub fn as_raw(&self) -> Handle { self.process }
 }
 
 // #[derive(Debug)]
