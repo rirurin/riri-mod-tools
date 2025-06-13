@@ -1,3 +1,5 @@
+use crate::address::ProcessInfo;
+
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
 unsafe extern "C" {
     pub(crate) unsafe fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
@@ -15,4 +17,16 @@ pub fn get_vtable_with_offset(name: &str, offset: u32) -> *const u8 {
         None => name.to_owned()
     };
     unsafe { get_vtable_rtti(name.as_ptr() as *const i8, offset) }
+}
+
+pub fn replace_vtable_method(name: &str, index: usize, handle_original: fn(usize), new_function: usize) -> bool {
+    let vtable = get_vtable(name) as *mut usize;
+    if vtable != std::ptr::null_mut() {
+        handle_original(unsafe { *vtable.add(index) });
+        // Often the portion of memory isn't set for writing, so set write permission
+        let mut process = ProcessInfo::get_current_process().unwrap();
+        unsafe { process.change_protection_raw(vtable.add(index) as *const u8, size_of::<usize>(), 0x40) }; // PAGE_EXECUTE_READWRITE
+        unsafe { *vtable.add(index) = new_function };
+        true
+    } else { false }
 }
