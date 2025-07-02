@@ -16,6 +16,7 @@ use windows::Win32::{
     }
 };
 
+#[cfg(feature = "reloaded")]
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
 unsafe extern "C" {
     pub(crate) unsafe fn get_executable_hash_ex() -> u64;
@@ -47,7 +48,10 @@ impl ProcessModule {
             owner: own,
             handle: hndl,
             module_size: pinfo.assume_init_ref().SizeOfImage as usize,
-            hash: get_executable_hash_ex()
+            #[cfg(feature = "reloaded")]
+            hash: get_executable_hash_ex(),
+            #[cfg(not(feature = "reloaded"))]
+            hash: u64::MAX,
         })
     }
     pub fn get_base_address(&self) -> usize { self.handle.0 as usize }

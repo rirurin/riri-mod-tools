@@ -1,5 +1,6 @@
 use crate::address::ProcessInfo;
 
+#[cfg(feature = "reloaded")]
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
 unsafe extern "C" {
     pub(crate) unsafe fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
@@ -16,7 +17,11 @@ pub fn get_vtable_with_offset(name: &str, offset: u32) -> *const u8 {
             else { name.to_owned() },
         None => name.to_owned()
     };
+    #[cfg(feature = "reloaded")]
     unsafe { get_vtable_rtti(name.as_ptr() as *const i8, offset) }
+    #[cfg(not(feature = "reloaded"))]
+    // TOOD: How will we represent Metaphor's C++ vtables on the server?
+    std::ptr::null()
 }
 
 pub fn replace_vtable_method(name: &str, index: usize, handle_original: fn(usize), new_function: usize) -> bool {

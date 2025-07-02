@@ -200,6 +200,15 @@ pub unsafe extern "C" fn get_indirect_address_long4_abs(addr: *mut u8) -> CanNul
 /// Get the hash of the target executable. Useful for selectively applying signatures by hash
 /// if a signature breaks between game updates
 #[no_mangle]
+#[cfg(feature = "reloaded")]
 pub unsafe extern "C" fn get_executable_hash() -> u64 {
     crate::address::get_executable_hash_ex()
+}
+
+/// Get the hash of the target executable. Useful for selectively applying signatures by hash
+/// if a signature breaks between game updates
+#[no_mangle]
+#[cfg(not(feature = "reloaded"))]
+pub unsafe extern "C" fn get_executable_hash() -> u64 {
+    u64::MAX
 }

@@ -657,14 +657,17 @@ impl CargoInfo {
     }
 
     pub fn new<T: AsRef<Path>>(base: T) -> Result<Self, Box<dyn Error>> {
-    // pub fn new<T: AsRef<Path>>(base: T) -> Result<Pin<Box<Self>>, Box<dyn Error>> {
-        // get project Cargo.toml
+        Self::new_with_resolver(base, |b| b.as_ref().parent().unwrap().join("Cargo.toml"))
+    }
+
+    pub fn new_with_resolver<P>(base: P, resolve_workspace: fn(P) -> PathBuf) -> Result<Self, Box<dyn Error>> 
+    where P: AsRef<Path>
+    {
         let proj_cargo = fs::read_to_string(base.as_ref().join("Cargo.toml"))?;
         let mut res = CargoInfo { table: proj_cargo.parse::<toml::Table>()?, table_package: NonNull::dangling() };
-        // let mut res = Box::new(CargoInfo { table: proj_cargo.parse::<toml::Table>()?, table_package: NonNull::dangling(), _pinned: PhantomPinned });
         res.table_package = NonNull::from(get_table(&res.table, "package")?); 
         // get workspace Cargo.toml package table, if it exists
-        let mut work_pkg = match fs::read_to_string(base.as_ref().parent().unwrap().join("Cargo.toml")) {
+        let mut work_pkg = match fs::read_to_string(resolve_workspace(base)) {
             Ok(v) => {
                 let base = v.parse::<toml::Table>()?;
                 let wk = get_optional_table(&base, "workspace")?;
@@ -704,8 +707,6 @@ impl CargoInfo {
             }
         } 
         Ok(res)
-        // let pinned = Box::into_pin(res);
-        // Ok(pinned)
     }
 }
 
