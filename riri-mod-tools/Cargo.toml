@@ -8,7 +8,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-chrono = "0.4.41"
 handlebars = "6.2"
 proc-macro2 = "1.0"
 quote = "1.0"

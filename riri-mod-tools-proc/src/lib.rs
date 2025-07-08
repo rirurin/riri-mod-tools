@@ -1,7 +1,8 @@
 #![allow(unused_variables)]
 
 use proc_macro::TokenStream;
-use riri_mod_tools_impl::{ 
+use riri_mod_tools_impl::{
+    datetime,
     ensure_layout,
     interleave,
     riri_hook,
@@ -172,4 +173,9 @@ pub fn create_hook(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn riri_mods_loaded_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
     riri_init::riri_mods_loaded_fn_impl(input.into(), annotated_item.into()).into()
+}
+
+#[proc_macro]
+pub fn date_time(input: TokenStream) -> TokenStream {
+    datetime::date_time_impl(input.into()).into()
 }
