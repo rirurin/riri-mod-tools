@@ -38,10 +38,10 @@ namespace {{ffi_namespace}}
 
 		// Logger
 		[DllImport(__DllName, EntryPoint = "set_reloaded_logger", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-		internal static extern nuint set_reloaded_logger(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
+		internal static extern nuint set_reloaded_logger(delegate* unmanaged[Stdcall]<nint, nint, int, int, byte, void> offset);
 
 		[DllImport(__DllName, EntryPoint = "set_reloaded_logger_newline", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-		internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, int, void> offset);
+		internal static extern nuint set_reloaded_logger_newline(delegate* unmanaged[Stdcall]<nint, nint, int, int, byte, void> offset);
 
 		[DllImport(__DllName, EntryPoint = "set_logger_color", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern bool set_logger_color(nint colorName);
@@ -76,15 +76,25 @@ namespace {{mod_id}}
     public unsafe partial class Mod
     {
 		[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
-		public static unsafe void ReloadedLoggerWrite(nint p, nint len, int color, int level) 
+		public static unsafe void ReloadedLoggerWrite(nint p, nint len, int color, int level, byte showPrefix)
 		{
-		    _logger!.WriteAsync($"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}", Color.FromArgb(color));
+		    var fmt = ((showPrefix & 1) != 0) switch
+		    {
+		        true => $"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}",
+		        false => Marshal.PtrToStringUTF8(p, (int)len),
+		    };
+		    _logger!.WriteAsync(fmt, Color.FromArgb(color));
 		}
 
 		[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
-		public static unsafe void ReloadedLoggerWriteLine(nint p, nint len, int color, int level)
+		public static unsafe void ReloadedLoggerWriteLine(nint p, nint len, int color, int level, byte showPrefix)
 		{
-		    _logger!.WriteLineAsync($"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}", Color.FromArgb(color));
+			var fmt = ((showPrefix & 1) != 0) switch
+        	{
+        	    true => $"[{{logger_prefix}}] {Marshal.PtrToStringUTF8(p, (int)len)}",
+        	    false => Marshal.PtrToStringUTF8(p, (int)len),
+        	};
+		    _logger!.WriteLineAsync(fmt, Color.FromArgb(color));
 		}
 
 		public void RegisterLogger() 

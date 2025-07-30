@@ -10,3 +10,5 @@
 /*/incl/
 /*/middata/
 *.g.cs
+
+.idea/
