@@ -8,6 +8,12 @@ pub unsafe extern "C" fn set_get_directory_for_mod(cb: GetDirFn) {
     GET_DIRECTORY_FOR_MOD.set(cb).unwrap();
 }
 
+pub static GET_CONFIG_DIRECTORY: OnceLock<GetDirFn> = OnceLock::new();
+#[no_mangle]
+pub unsafe extern "C" fn set_get_config_directory(cb: GetDirFn) {
+    GET_CONFIG_DIRECTORY.set(cb).unwrap();
+}
+
 pub static FREE_CSHARP_STRING: OnceLock<FreeStrFn> = OnceLock::new();
 
 #[no_mangle]
@@ -47,8 +53,14 @@ impl Drop for CSharpString {
     }
 }
 
+// IModLoader::GetDirectoryForModId
 pub fn get_directory_for_mod() -> CSharpString {
-    CSharpString::new(unsafe { (GET_DIRECTORY_FOR_MOD.get().unwrap())() })
+    CSharpString::new(unsafe { GET_DIRECTORY_FOR_MOD.get().unwrap()() })
+}
+
+// IModLoader::GetModConfigDirectory
+pub fn get_config_directory() -> CSharpString {
+    CSharpString::new(unsafe { GET_CONFIG_DIRECTORY.get().unwrap()() })
 }
 
 pub fn find_pattern(text: &str, start: *const u8, len: u32) -> *const u8 {
