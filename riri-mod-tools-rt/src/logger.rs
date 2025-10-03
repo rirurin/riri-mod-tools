@@ -487,7 +487,7 @@ pub static RELOADED_LOGGER_LN: OnceLock<LogFn> = OnceLock::new();
 
 #[no_mangle]
 pub unsafe extern "C" fn set_reloaded_logger(cb: LogFn) {
-    RELOADED_LOGGER.set(cb).unwrap();    
+    RELOADED_LOGGER.set(cb).unwrap();
 }
 
 #[no_mangle]

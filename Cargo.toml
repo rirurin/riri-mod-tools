@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 authors = [ "Rirurin" ]
 license-file = "LICENSE"
@@ -33,6 +33,17 @@ debug = true # Allow us to debug using LLDB
 [profile.release-ltoless]
 inherits = "release"
 lto = false
+
+# Slow Debug, for fast iteration
+[profile.slow-debug]
+inherits = "release"
+debug = true
+lto = "thin"
+# lto = false
+incremental = true
+codegen-units = 64
+
+# For Rirurin: Uncomment the patches when in active development!
 
 # [patch."https://github.com/rirurin/cpp-types"]
 # cpp-types = { path = "../cpp-types/cpp-types" }

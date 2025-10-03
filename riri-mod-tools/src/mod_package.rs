@@ -45,6 +45,13 @@ pub mod reloaded3ririext {
         Id: u32
     }
 
+    // NOT IN SPEC
+    #[allow(non_snake_case)]
+    #[derive(Deserialize, Debug)]
+    pub struct NugetUpdateInfo {
+        pub RepositoryUrls: Vec<String>,
+    }
+
     #[allow(non_snake_case)]
     #[derive(Deserialize, Debug)]
     pub struct R2Dependency {
@@ -73,7 +80,8 @@ pub mod reloaded3ririext {
         pub AssetFileName: Option<String>, // NOT IN SPEC, default to Mod.zip
         pub Gamebanana: Option<GamebananaUpdateInfo>,
         pub Github: Option<GithubUpdateInfo>,
-        pub Nexus: Option<NexusUpdateInfo>
+        pub Nexus: Option<NexusUpdateInfo>,
+        pub Nuget: Option<NugetUpdateInfo>, // NOT IN SPEC
     }
 
     impl UpdateSourceData {
@@ -276,13 +284,22 @@ pub mod reloaded2 {
 
     #[allow(non_snake_case)]
     #[derive(Debug, Serialize)]
+    pub struct NugetRelease {
+        DefaultRepositoryUrls: Vec<String>,
+        AllowUpdateFromAnyRepository: bool
+    }
+
+    #[allow(non_snake_case)]
+    #[derive(Debug, Serialize)]
     pub struct PluginData {
         #[serde(skip_serializing_if = "DepedencyDataHashMap::is_empty")]
         GithubDependencies: DepedencyDataHashMap,
         #[serde(skip_serializing_if = "DepedencyDataHashMap::is_empty")]
         GameBananaDependencies: DepedencyDataHashMap,
         #[serde(skip_serializing_if = "Option::is_none")]
-        GithubRelease: Option<GithubDependency>
+        GithubRelease: Option<GithubDependency>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        NuGet: Option<NugetRelease>
     }
 
     #[allow(non_snake_case)]
@@ -358,7 +375,8 @@ pub mod reloaded2 {
                 PluginData: PluginData { 
                     GithubDependencies: DepedencyDataHashMap::new(), 
                     GameBananaDependencies: DepedencyDataHashMap::new(), 
-                    GithubRelease: None 
+                    GithubRelease: None,
+                    NuGet: None
                 },
                 CanUnload: None,
                 HasExports: None,
@@ -397,7 +415,8 @@ pub mod reloaded2 {
             let mut plugins = PluginData { 
                 GameBananaDependencies: DepedencyDataHashMap::new(), 
                 GithubDependencies: DepedencyDataHashMap::new(),
-                GithubRelease: None
+                GithubRelease: None,
+                NuGet: None
             };
             for dep in &value.R2Dependencies {
                 if dep.UpdateSourceData.is_none() { continue; }
@@ -437,6 +456,12 @@ pub mod reloaded2 {
                         UseReleaseTag: false,
                         AssetFileName: d.get_asset_file_name()
                     });
+                }
+                if let Some(n) = &d.Nuget {
+                    plugins.NuGet = Some(NugetRelease { 
+                        DefaultRepositoryUrls: n.RepositoryUrls.clone(), 
+                        AllowUpdateFromAnyRepository: false
+                    })
                 }
             }
             Ok(Package {

@@ -1,3 +1,4 @@
+# Rust build files
 /target
 /Cargo.lock
 /*/target
@@ -11,4 +12,12 @@
 /*/middata/
 *.g.cs
 
-.idea/
+# Jetbrains IDE
+**/.idea/*
+
+# Build script 
+/buildscript/*/bin
+/buildscript/*/obj
+
+# Reloaded-II publish script
+/Publish/*
