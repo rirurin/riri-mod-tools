@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
 
-namespace riri.criadx.BuildScript;
+namespace riri.modruntime.BuildScript;
 
 public abstract class CodePackage
 {

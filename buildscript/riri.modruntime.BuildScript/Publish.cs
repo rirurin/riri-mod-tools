@@ -2,7 +2,7 @@
 using System.IO.Compression;
 using System.Net;
 
-namespace riri.criadx.BuildScript;
+namespace riri.modruntime.BuildScript;
 
 public class PublishState : IDisposable
 {
@@ -199,7 +199,7 @@ public abstract class PublishCommon
         {
             toolPublish.StartInfo.FileName = State.ReloadedPublisherTool;
             toolPublish.StartInfo.Arguments += $"--modfolder \"{State.PublishBuildDirectory}\" ";
-            toolPublish.StartInfo.Arguments += "--packagename \"riri.criadx\" ";
+            toolPublish.StartInfo.Arguments += "--packagename \"riri.modruntime\" ";
             toolPublish.StartInfo.Arguments += $"--changelogpath \"{State.ChangelogPath}\" ";
             toolPublish.StartInfo.Arguments += $"--outputfolder \"{GetDirectory()}\" ";
             toolPublish.StartInfo.Arguments += $"--publishtarget {GetPublishTarget()}";

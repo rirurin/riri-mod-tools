@@ -1,4 +1,4 @@
-﻿namespace riri.criadx.BuildScript;
+﻿namespace riri.modruntime.BuildScript;
 public struct ColorRGB
 {
     public byte R;

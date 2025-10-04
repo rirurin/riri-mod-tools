@@ -1,4 +1,4 @@
-﻿namespace riri.criadx.BuildScript;
+﻿namespace riri.modruntime.BuildScript;
 
 public class SkipGlobals : Argument
 {

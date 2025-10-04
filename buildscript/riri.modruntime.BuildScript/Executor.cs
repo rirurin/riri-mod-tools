@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Reflection;
 
-namespace riri.criadx.BuildScript;
+namespace riri.modruntime.BuildScript;
 
 public abstract class ExecutorBase<TArgumentList, TProjectManager>
     where TArgumentList : ArgumentListBase

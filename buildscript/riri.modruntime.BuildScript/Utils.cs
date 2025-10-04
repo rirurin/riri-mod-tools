@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace riri.criadx.BuildScript;
+namespace riri.modruntime.BuildScript;
 
 public static class Utils
 {
