@@ -34,6 +34,9 @@ ItemId = 559400
 UserName = "Rirurin"
 RepositoryName = "riri-mod-tools"
 
+[UpdateSourceData.Nuget]
+RepositoryUrls = [ "https://packages.sewer56.moe/v3/index.json" ]
+
 [[R2Dependencies]]
 Id = "reloaded.sharedlib.hooks"
 [R2Dependencies.UpdateSourceData]
