@@ -3,7 +3,7 @@ use crate::address::ProcessInfo;
 #[cfg(feature = "reloaded")]
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
 unsafe extern "C" {
-    pub(crate) unsafe fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
+    pub(crate) fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
 }
 
 pub fn get_vtable(name: &str) -> *const u8 {

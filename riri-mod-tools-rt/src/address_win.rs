@@ -19,7 +19,7 @@ use windows::Win32::{
 #[cfg(feature = "reloaded")]
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
 unsafe extern "C" {
-    pub(crate) unsafe fn get_executable_hash_ex() -> u64;
+    pub(crate) fn get_executable_hash_ex() -> u64;
 }
 
 // Based on .NET's System.Diagnostics.Process:
@@ -40,9 +40,9 @@ use std::sync::OnceLock;
 
 impl ProcessModule {
     pub unsafe fn new(own: Handle, hndl: Module) -> windows::core::Result<Self> {
-        let mut pinfo: std::mem::MaybeUninit<ProcessStatus::MODULEINFO> = std::mem::MaybeUninit::uninit();
+        let mut pinfo: MaybeUninit<ProcessStatus::MODULEINFO> = MaybeUninit::uninit();
         ProcessStatus::GetModuleInformation(
-            own, hndl, pinfo.as_mut_ptr(), std::mem::size_of::<ProcessStatus::MODULEINFO>() as u32
+            own, hndl, pinfo.as_mut_ptr(), size_of::<ProcessStatus::MODULEINFO>() as u32
         )?;
         Ok(ProcessModule {
             owner: own,
@@ -79,15 +79,11 @@ impl ProcessInfo {
     fn try_get_main_module(handle: Handle) -> windows::core::Result<ProcessModule> {
         unsafe {
             let mut module_list: Vec<Module> = Vec::with_capacity(64);
-            let mod_sz = (module_list.capacity() * std::mem::size_of::<Module>()) as u32;
+            let mod_sz = (module_list.capacity() * size_of::<Module>()) as u32;
             let mod_ptr = module_list.as_mut_ptr();
             let mut mod_sz_total: u32 = 0;
             ProcessStatus::EnumProcessModules(handle, mod_ptr, mod_sz, (&mut mod_sz_total) as *mut u32)?;
-            let new_len = (if mod_sz_total > mod_sz {
-                mod_sz
-            } else {
-                mod_sz_total
-            } as usize) / std::mem::size_of::<Module>();
+            let new_len = (if mod_sz_total > mod_sz { mod_sz } else { mod_sz_total } as usize) / size_of::<Module>();
             module_list.set_len(new_len);
             Ok(ProcessModule::new(handle, module_list[0])?)
         }

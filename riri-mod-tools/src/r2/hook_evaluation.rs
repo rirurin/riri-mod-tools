@@ -756,6 +756,7 @@ where P: AsRef<Path>
         data.insert("logger_prefix".to_owned(), toml::Value::String(logger_prefix));
         data.insert("logger_color".to_owned(), toml::Value::String(logger_color));
         data.insert("uses_shared_scans".to_owned(), toml::Value::Boolean(self.uses_shared_scans));
+        data.insert("csharp_function_invoke".to_owned(), toml::Value::Boolean(self.use_csharp_invocation));
         data.insert("utility_namespace".to_owned(), toml::Value::String(self.ffi_utility_class()));
         data.insert("ffi_namespace".to_owned(), toml::Value::String(self.ffi_namespace()));
         data.insert("exports_interfaces".to_owned(), toml::Value::Boolean(false));

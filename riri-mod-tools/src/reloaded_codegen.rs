@@ -29,7 +29,8 @@ pub struct HookEvaluator<'a, P: AsRef<Path>> {
     // Mod.g.cs storage
     pub(crate) mod_hook_declarations: String,
     pub(crate) mod_hook_set: String,
-    pub(crate) uses_shared_scans: bool
+    pub(crate) uses_shared_scans: bool,
+    pub(crate) use_csharp_invocation: bool
 }
 
 impl<'a, P> HookEvaluator<'a, P>
@@ -53,7 +54,8 @@ where P: AsRef<Path>
             ignore_files: std::collections::HashSet::new(),
             mod_hook_declarations: String::new(),
             mod_hook_set: String::new(),
-            uses_shared_scans: false
+            uses_shared_scans: false,
+            use_csharp_invocation: package.UseCsharpInvocation.map_or(false, |v| v)
         })
     }
 }
