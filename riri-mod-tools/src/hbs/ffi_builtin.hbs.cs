@@ -57,6 +57,14 @@ namespace {{ffi_namespace}}
 		[DllImport(__DllName, EntryPoint = "set_logger_color", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern bool set_logger_color(nint colorName);
 
+		// Logger callback
+
+		[DllImport(__DllName, EntryPoint = "on_reloaded_logger", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+    	internal static extern void on_reloaded_logger(nint pString);
+
+    	[DllImport(__DllName, EntryPoint = "on_reloaded_logger_newline", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+    	internal static extern void on_reloaded_logger_newline(nint pString);
+
 		// Executable hash
 		[DllImport(__DllName, EntryPoint = "get_executable_hash", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
 		internal static extern ulong get_executable_hash();
@@ -238,6 +246,9 @@ namespace {{mod_id}}
                 }
             }
             {{/if}}
+
+            _logger!.OnWrite += (_, p) => {{utility_namespace}}.on_reloaded_logger(Marshal.StringToHGlobalUni(p.text));
+            _logger!.OnWriteLine += (_, p) => {{utility_namespace}}.on_reloaded_logger_newline(Marshal.StringToHGlobalUni(p.text));
 		}
 
 		[UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]

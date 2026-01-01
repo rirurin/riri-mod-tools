@@ -5,6 +5,8 @@ use std::{
     fmt::Display,
     sync::OnceLock
 };
+use std::sync::Mutex;
+use crate::mod_loader_data::CSharpString;
 
 /// Defines a color which can be used to set the color that a message will be printed as in the
 /// Reloaded console output. Designed to closely represent C#'s Color type in
@@ -497,12 +499,12 @@ pub unsafe extern "C" fn set_reloaded_logger_newline(cb: LogFn) {
 
 #[no_mangle]
 pub unsafe extern "C" fn invoke_reloaded_logger(p: *const u8, len: usize, c: LogColor, level: LogLevel, show_prefix: bool) {
-    (RELOADED_LOGGER.get().unwrap())(p, len, c, level, show_prefix);
+    RELOADED_LOGGER.get().unwrap()(p, len, c, level, show_prefix);
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn invoke_reloaded_logger_newline(p: *const u8, len: usize, c: LogColor, level: LogLevel, show_prefix: bool) {
-    (RELOADED_LOGGER_LN.get().unwrap())(p, len, c, level, show_prefix);
+    RELOADED_LOGGER_LN.get().unwrap()(p, len, c, level, show_prefix);
 }
 
 #[no_mangle]
@@ -515,4 +517,32 @@ pub unsafe extern "C" fn set_logger_color(name: *const i8) -> bool {
         },
         Err(_) => false
     }
+}
+
+static ON_RELOADED_LOGGER: Mutex<Vec<fn(&str)>> = Mutex::new(vec![]);
+
+#[no_mangle]
+pub unsafe extern "C" fn on_reloaded_logger(p: *const u16) {
+    let str = CSharpString::new(p);
+    let callbacks = ON_RELOADED_LOGGER.lock().unwrap();
+    let str_ref = &Into::<String>::into(str);
+    (&*callbacks).iter().for_each(|cb| cb(str_ref));
+}
+
+pub fn add_reloaded_logger_callback(cb: fn(&str)) {
+   ON_RELOADED_LOGGER.lock().unwrap().push(cb);
+}
+
+static ON_RELOADED_LOGGER_NEWLINE: Mutex<Vec<fn(&str)>> = Mutex::new(vec![]);
+
+#[no_mangle]
+pub unsafe extern "C" fn on_reloaded_logger_newline(p: *const u16) {
+    let str = CSharpString::new(p);
+    let callbacks = ON_RELOADED_LOGGER_NEWLINE.lock().unwrap();
+    let str_ref = &Into::<String>::into(str);
+    (&*callbacks).iter().for_each(|cb| cb(str_ref));
+}
+
+pub fn add_reloaded_logger_newline_callback(cb: fn(&str)) {
+    ON_RELOADED_LOGGER_NEWLINE.lock().unwrap().push(cb);
 }
