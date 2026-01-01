@@ -2,6 +2,11 @@
 // DO NOT EDIT THIS. It will get overwritten if you rebuild {{mod_name}}!
 // (btw, please keep this in sync with extern definitions in riri-mod-tools-rt! ^^;)
 
+{{#if csharp_function_invoke}}
+using Minerals.StringCases;
+using Reloaded.Memory.Extensions;
+using Reloaded.Mod.Interfaces;
+{{/if}}
 using Reloaded.Memory.Sigscan;
 {{#if csharp_function_invoke}}
 using System.Collections.Concurrent;
@@ -103,19 +108,19 @@ namespace {{ffi_namespace}}
     	internal static extern void set_free_object(delegate* unmanaged[Stdcall]<nint, void> offset);
 
     	[DllImport(__DllName, EntryPoint = "set_object_as_u8", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-    	internal static extern void set_object_as_u8(delegate* unmanaged[Stdcall]<nint, byte> offset);
+    	internal static extern void set_object_as_u8(delegate* unmanaged[Stdcall]<nint, byte*, byte> offset);
 
     	[DllImport(__DllName, EntryPoint = "set_object_as_u16", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-    	internal static extern void set_object_as_u16(delegate* unmanaged[Stdcall]<nint, ushort> offset);
+    	internal static extern void set_object_as_u16(delegate* unmanaged[Stdcall]<nint, byte*, ushort> offset);
 
      	[DllImport(__DllName, EntryPoint = "set_object_as_u32", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-     	internal static extern void set_object_as_u32(delegate* unmanaged[Stdcall]<nint, uint> offset);
+     	internal static extern void set_object_as_u32(delegate* unmanaged[Stdcall]<nint, byte*, uint> offset);
 
      	[DllImport(__DllName, EntryPoint = "set_object_as_u64", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-     	internal static extern void set_object_as_u64(delegate* unmanaged[Stdcall]<nint, ulong> offset);
+     	internal static extern void set_object_as_u64(delegate* unmanaged[Stdcall]<nint, byte*, ulong> offset);
 
      	[DllImport(__DllName, EntryPoint = "set_object_as_string", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
-     	internal static extern void set_object_as_string(delegate* unmanaged[Stdcall]<nint, nint> offset);
+     	internal static extern void set_object_as_string(delegate* unmanaged[Stdcall]<nint, byte*, nint> offset);
 
    	    [DllImport(__DllName, EntryPoint = "set_get_object_instance", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
    	    internal static extern void set_get_object_instance(delegate* unmanaged[Stdcall]<ObjectInitializer*, nint> offset);
@@ -128,7 +133,7 @@ namespace {{mod_id}}
 
     {{#if csharp_function_invoke}}
 
-    // This must stay in sync with ObjectInitializer in riri_mod_tools_rt::interop!
+    // This must stay in sync with ObjectInitializer in riri_mod_tools_rt::system!
     [StructLayout(LayoutKind.Sequential)]
     public struct ObjectInitializer
     {
@@ -136,7 +141,7 @@ namespace {{mod_id}}
         internal nint Size;
     }
 
-    // This must stay in sync with StringData in riri_mod_tools_rt::interop!
+    // This must stay in sync with StringData in riri_mod_tools_rt::system!
     [StructLayout(LayoutKind.Sequential)]
     public struct StringData
     {
@@ -156,12 +161,36 @@ namespace {{mod_id}}
     internal class MethodList
     {
         public MethodList(Type type)
-            => Types = type.GetMethods()
-                .Select(x => (XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(x.Name)), x))
-                .Distinct(new MethodListInitComparer())
-                .ToDictionary();
+        {
+            List<(ulong, MethodInfo)> MethodList = new();
+            HashSet<Type> DistinctTypes = [];
+            var ThisType = type.Name;
+            ImportMethods(type);
+            Methods = MethodList.ToDictionary();
+            Parameters = MethodList.Select(x => (x.Item1, new List<nint>())).ToDictionary();
+            return;
 
-        public Dictionary<ulong, MethodInfo> Types { get; }
+            void ImportMethods(Type type)
+            {
+                if (!DistinctTypes.Add(type)) return;
+                MethodList.AddRange(type.GetMethods()
+                    .Select(Method =>
+                    {
+                        var ParamHashes = Method.GetParameters().Select(x =>
+                        {
+                            var ParamType = x.ParameterType;
+                            return ParamType.FullName != null ? ParamType.FullName!.ToXxh3() : 0;
+                        });
+                        var FinalHash = Method.Name.ToXxh3();
+                        FinalHash = ParamHashes.Aggregate(FinalHash, (current, Param) => current + Param);
+                        return (FinalHash, Method);
+                    }));
+                foreach (var impl in type.GetInterfaces())
+                    ImportMethods(impl);
+            }
+        }
+
+        public Dictionary<ulong, MethodInfo> Methods { get; }
         public Dictionary<ulong, List<nint>> Parameters { get; } = [];
     }
     {{/if}}
@@ -225,6 +254,16 @@ namespace {{mod_id}}
 			{{utility_namespace}}.set_object_as_u32(&ObjectAsU32);
 			{{utility_namespace}}.set_object_as_u64(&ObjectAsU64);
 			{{utility_namespace}}.set_object_as_string(&ObjectAsString);
+			{{utility_namespace}}.set_get_object_instance(&GetObjectInstance);
+
+			foreach (var BasicType in BasicTypeGenerators)
+			    BasicTypes.Add(CreateTypePath(BasicType, "riri_mod_tools_rt").ToXxh3(), BasicType);
+
+			foreach (var (R2Type, GetSingleton) in Reloaded2Interfaces)
+			{
+			    BasicTypes.Add(CreateTypePath(R2Type, "riri_mod_tools_rt").ToXxh3(), R2Type);
+			    SingletonTypes.Add(R2Type, GetSingleton);
+			}
 
             foreach (var Assembly in AppDomain.CurrentDomain.GetAssemblies()
                          .Where(x => x.FullName!.Split(".")[0] != "System"
@@ -233,16 +272,17 @@ namespace {{mod_id}}
                 try
                 {
                     foreach (var Type in Assembly.GetTypes()
-                                 .Where(x => x is { IsInterface: true, FullName: not null }))
+                                 .Where(x => x is { IsInterface: true, IsGenericType: false, FullName: not null }))
                     {
-                        var TypeHash = XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(Type.FullName!));
+                        var Namespace = Reloaded2Interfaces.ContainsKey(Type) ? "riri_mod_tools_rt" : null;
+                        var TypePath = CreateTypePath(Type, Namespace);
                         // _logger!.WriteLineAsync($"TODO: Register '{Type.FullName!}' as 0x{TypeHash:x}");
-                        Types.TryAdd(TypeHash, new(Type));
+                        Types.TryAdd(TypePath.ToXxh3(), new(Type));
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    _logger!.WriteLineAsync($"[{{logger_prefix}}]: Could not GetTypes on assembly '{Assembly.FullName!}'", Color.Red);
+                    _logger!.WriteLineAsync($"[{{logger_prefix}}]: Could not GetTypes on assembly '{Assembly.FullName!}' - {ex.Message}", Color.Red);
                 }
             }
             {{/if}}
@@ -279,20 +319,45 @@ namespace {{mod_id}}
 			if (result.Found)
 			{
 				return start + result.Offset;
-			} else 
+			} else
 			{
 				return nint.Zero;
 			}
 		}
 
         {{#if csharp_function_invoke}}
+
+    	private static List<Type> BasicTypeGenerators =
+    	[
+           typeof(byte), typeof(sbyte), typeof(bool), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+           typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(string)
+    	];
+    	private static Dictionary<Type, Func<object>> Reloaded2Interfaces = new()
+    	{
+    	    { typeof(IModConfig), () => _modConfig! }
+    	};
+
         // All reflected types
 		private static ConcurrentDictionary<ulong, MethodList> Types = [];
 
 		// For object initialization: basic types
 		private static Dictionary<ulong, Type> BasicTypes = [];
 		// Singleton objects - these correspond to Reloaded-II interfaces from other mods
-        private static Dictionary<Type, Func<Type>> SingletonTypes = [];
+        private static Dictionary<Type, Func<object>> SingletonTypes = [];
+
+        #nullable enable
+        private static string CreateTypePath(Type type, string? overrideNamespace = null)
+        {
+            var PathArr = type.FullName!.Split("`", 2); // Remove generic arguments from full name
+            var GenericFmt = PathArr.Length > 1 ? $"<{string.Join(", ", type.GenericTypeArguments.Select(x => CreateTypePath(x)))}>" : string.Empty;
+            var Path = type.IsArray ? PathArr[0][..^2] : PathArr[0];
+            var Parts = Path.Split(".");
+            var RustName = string.Join("::", Parts.Select((x, i) => i != Parts.Length - 1 ? x.ToSnakeCase() : x));
+            RustName = $"{overrideNamespace ?? "crate"}::{RustName}{GenericFmt}";
+            if (type.IsArray) return $"riri_mod_tools_rt::system::Array<{RustName}>";
+            return RustName;
+        }
+        #nullable disable
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
         public static void PushParameter(ulong TypeHash, ulong MethodHash, nint pParam)
@@ -303,7 +368,7 @@ namespace {{mod_id}}
         {
             var Object = GCHandle.FromIntPtr(pObject).Target;
             var Methods = Types[TypeHash];
-            var ResultObj = Methods.Types[MethodHash]
+            var ResultObj = Methods.Methods[MethodHash]
                 .Invoke(Object, Methods.Parameters[MethodHash]
                     .Select(x => GCHandle.FromIntPtr(x).Target!).ToArray());
             Methods.Parameters[MethodHash].Clear();
@@ -315,27 +380,71 @@ namespace {{mod_id}}
             => GCHandle.FromIntPtr(pObject).Free();
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        public static byte ObjectAsU8(nint pObject)
-            => (byte)GCHandle.FromIntPtr(pObject).Target;
+        public static byte ObjectAsU8(nint pObject, byte* pSuccess)
+        {
+            var Object = GCHandle.FromIntPtr(pObject).Target;
+            if (Object.GetType() == typeof(byte))
+                return (byte)Object;
+            if (Object.GetType() == typeof(sbyte))
+                return (byte)(sbyte)Object;
+            if (Object.GetType() == typeof(bool))
+                return ((bool)Object).ToByte();
+            *pSuccess = 0;
+            return 0;
+        }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        public static ushort ObjectAsU16(nint pObject)
-            => (ushort)GCHandle.FromIntPtr(pObject).Target;
+        public static ushort ObjectAsU16(nint pObject, byte* pSuccess)
+        {
+            var Object = GCHandle.FromIntPtr(pObject).Target;
+            if (Object.GetType() == typeof(ushort))
+                return (ushort)Object;
+            if (Object.GetType() == typeof(short))
+                return (ushort)(short)Object;
+            *pSuccess = 0;
+            return 0;
+        }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        public static uint ObjectAsU32(nint pObject)
-            => (uint)GCHandle.FromIntPtr(pObject).Target;
+        public static uint ObjectAsU32(nint pObject, byte* pSuccess)
+        {
+            var Object = GCHandle.FromIntPtr(pObject).Target;
+            if (Object.GetType() == typeof(uint))
+                return (uint)Object;
+            if (Object.GetType() == typeof(int))
+                return (uint)(int)Object;
+            if (Object.GetType() == typeof(float))
+                return BitConverter.SingleToUInt32Bits((float)Object);
+            *pSuccess = 0;
+            return 0;
+        }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        public static ulong ObjectAsU64(nint pObject)
-            => (ulong)GCHandle.FromIntPtr(pObject).Target;
+        public static ulong ObjectAsU64(nint pObject, byte* pSuccess)
+        {
+            var Object = GCHandle.FromIntPtr(pObject).Target;
+            if (Object.GetType() == typeof(ulong))
+                return (ulong)Object;
+            if (Object.GetType() == typeof(long))
+                return (ulong)(long)Object;
+            if (Object.GetType() == typeof(double))
+                return BitConverter.DoubleToUInt64Bits((double)Object);
+            *pSuccess = 0;
+            return 0;
+        }
 
         [UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
-        public static nint ObjectAsString(nint pObject)
-            => Marshal.StringToHGlobalUni((string)GCHandle.FromIntPtr(pObject).Target);
+        public static nint ObjectAsString(nint pObject, byte* pSuccess)
+        {
+            var Object = GCHandle.FromIntPtr(pObject).Target;
+            if (Object.GetType() == typeof(string))
+                return Marshal.StringToHGlobalUni((string)Object);
+            *pSuccess = 0;
+            return nint.Zero;
+        }
 
         private static nint GetObjectFromType<T>(ObjectInitializer* initializer) where T : unmanaged
-            => GCHandle.ToIntPtr(GCHandle.Alloc(*(T*)(initializer + 1)));
+            => GCHandle.ToIntPtr(GCHandle.Alloc(*(T*)(initializer + 1), GCHandleType.Pinned));
 
         [UnmanagedCallersOnly(CallConvs = [ typeof(CallConvStdcall) ])]
         public static nint GetObjectInstance(ObjectInitializer* initializer)
@@ -343,7 +452,7 @@ namespace {{mod_id}}
             if (!BasicTypes.TryGetValue(initializer->Hash, out var Type)) return nint.Zero;
             if (SingletonTypes.TryGetValue(Type, out var Callback))
                 return GCHandle.ToIntPtr(GCHandle.Alloc(Callback()));
-            if (Type != typeof(byte))
+            if (Type == typeof(byte))
                 return GetObjectFromType<byte>(initializer);
             if (Type == typeof(sbyte))
                 return GetObjectFromType<sbyte>(initializer);
@@ -368,11 +477,17 @@ namespace {{mod_id}}
             if (Type == typeof(string))
             {
                 var stringData = (StringData*)(initializer + 1);
-                var stringObj = Marshal.PtrToStringUTF8(stringData->Ptr, (int)stringData->Len);
-                return GCHandle.ToIntPtr(GCHandle.Alloc(stringObj));
+                return GCHandle.ToIntPtr(GCHandle.Alloc(Marshal.PtrToStringUTF8(stringData->Ptr, (int)stringData->Len)));
             }
             return nint.Zero;
         }
         {{/if}}
     }
+    {{#if csharp_function_invoke}}
+    public static class TypeExtensions
+    {
+        public static ulong ToXxh3(this string Value)
+            => XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(Value));
+    }
+    {{/if}}
 }

@@ -7,4 +7,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+      <PackageReference Include="Minerals.StringCases" Version="0.2.2" />
+      <PackageReference Include="Reloaded.Mod.Interfaces" Version="2.4.0" />
+      <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
+  </ItemGroup>
+
 </Project>
