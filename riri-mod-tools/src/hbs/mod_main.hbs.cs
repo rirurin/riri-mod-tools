@@ -11,6 +11,9 @@ using Reloaded.Mod.Interfaces.Internal;
 using SharedScans.Interfaces;
 {{/if}}
 using System.Drawing;
+{{#if csharp_function_invoke}}
+using System.Runtime.InteropServices;
+{{/if}}
 namespace {{mod_id}}
 {
     {{#if exports_interfaces}}
@@ -96,7 +99,9 @@ namespace {{mod_id}}
 
 		private void OnModLoading(IModV1 mod, IModConfigV1 conf)
 		{
-			// TODO
+		    {{#if csharp_function_invoke}}
+		    {{utility_namespace}}.on_mod_loading(GCHandle.ToIntPtr(GCHandle.Alloc(conf)));
+		    {{/if}}
 		}
 
 	    public override void ConfigurationUpdated(Config configuration)

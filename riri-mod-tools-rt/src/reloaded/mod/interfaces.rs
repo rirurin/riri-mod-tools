@@ -44,4 +44,8 @@ impl IModConfig {
         unsafe { crate::system::String::new_unchecked(Object::new_unchecked(
             crate::interop::call_function(Self::HASH, 0xcfccce16ceb8e518, ***self))).value() }
     }
+
+    pub unsafe fn new_unchecked(value: Object) -> Self {
+        Self(value)
+    }
 }

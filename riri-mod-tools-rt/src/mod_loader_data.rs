@@ -1,4 +1,8 @@
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use crate::logln;
+use crate::reloaded::r#mod::interfaces::IModConfig;
+use crate::system::Object;
+
 type GetDirFn = unsafe extern "C" fn() -> *const u16;
 type FreeStrFn = unsafe extern "C" fn(*const u16) -> ();
 pub static GET_DIRECTORY_FOR_MOD: OnceLock<GetDirFn> = OnceLock::new();
@@ -71,4 +75,19 @@ pub fn find_pattern(text: &str, start: *const u8, len: u32) -> *const u8 {
         None => text.to_owned()
     };
     unsafe { FIND_PATTERN_FUNC.get().unwrap()(text.as_ptr(), start, len) }
+}
+
+static ON_MOD_LOADING: Mutex<Vec<fn(&IModConfig)>> = Mutex::new(vec![]);
+
+// OnModLoading API event
+#[no_mangle]
+pub unsafe extern "C" fn on_mod_loading(p_mod_config: usize) {
+    let mod_config = IModConfig::new_unchecked(
+        Object::new_unchecked(p_mod_config));
+    let callbacks = ON_MOD_LOADING.lock().unwrap();
+    (&*callbacks).iter().for_each(|cb| cb(&mod_config));
+}
+
+pub fn add_on_mod_loading_callback(cb: fn(&IModConfig)) {
+    ON_MOD_LOADING.lock().unwrap().push(cb);
 }

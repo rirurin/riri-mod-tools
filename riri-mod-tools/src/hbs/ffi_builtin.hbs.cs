@@ -124,6 +124,11 @@ namespace {{ffi_namespace}}
 
    	    [DllImport(__DllName, EntryPoint = "set_get_object_instance", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
    	    internal static extern void set_get_object_instance(delegate* unmanaged[Stdcall]<ObjectInitializer*, nint> offset);
+
+   	    // OnModLoading support
+
+   	    [DllImport(__DllName, EntryPoint = "on_mod_loading", CallingConvention = CallingConvention.StdCall, ExactSpelling = true)]
+   	    internal static extern void on_mod_loading(nint pModConfig);
      	{{/if}}
     }
 }
