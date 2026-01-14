@@ -1,7 +1,13 @@
 use crate::address::ProcessInfo;
 
-#[cfg(feature = "reloaded")]
+#[cfg(all(feature = "reloaded", target_os = "windows"))]
 #[link(name = "riri_mod_runtime_reloaded", kind = "raw-dylib")]
+unsafe extern "C" {
+    pub(crate) fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
+}
+
+#[cfg(all(feature = "reloaded", target_os = "linux"))]
+#[link(name = "riri_mod_runtime_reloaded", kind = "dylib")]
 unsafe extern "C" {
     pub(crate) fn get_vtable_rtti(name: *const i8, offset: u32) -> *const u8;
 }

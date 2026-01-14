@@ -37,6 +37,7 @@ pub struct ProcessModule {
     hash: u64,
 }
 use std::sync::OnceLock;
+use crate::protection::PageProtection;
 
 impl ProcessModule {
     pub unsafe fn new(own: Handle, hndl: Module) -> windows::core::Result<Self> {
@@ -94,6 +95,10 @@ impl ProcessInfo {
     pub fn get_executable_hash(&self) -> u64 { self.get_main_module().hash }
     // pub fn get_main_window_handle(&self) {}
     // pub fn get_main_window_title(&self) {}
+    pub fn change_protection(&mut self, region: &[u8], protection: PageProtection) {
+        let prot_raw: Memory::PAGE_PROTECTION_FLAGS = protection.into();
+        unsafe { self.change_protection_raw(region.as_ptr(), region.len(), prot_raw.0) };
+    }
     pub unsafe fn change_protection_raw(&mut self, address: *const u8, size: usize, protect: u32) {
         let flags = Memory::PAGE_PROTECTION_FLAGS(protect);
         let mut old_flags: MaybeUninit<Memory::PAGE_PROTECTION_FLAGS> = MaybeUninit::uninit();
