@@ -8,7 +8,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bitflags = "2.10.0"
+bitflags = "^2.10.0"
 twox-hash = "2.1.0"
 riri-mod-tools-proc = { path = "../riri-mod-tools-proc" }
 

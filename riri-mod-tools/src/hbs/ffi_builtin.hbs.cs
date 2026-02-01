@@ -248,7 +248,10 @@ namespace {{mod_id}}
 			HashSet<string> ExcludedAssemblies = [
 			    // Could not load file or assembly 'Microsoft.Extensions.Logging.Abstractions, Version=9.0.0.0, Culture=neutral,
 			    // PublicKeyToken=adb9793829ddae60'. An operation is not legal in the current state. (0x80131509)
-			    "RyoTune.Reloaded"
+			    "RyoTune.Reloaded",
+			    // Could not GetTypes on assembly 'Reloaded.Hooks.ReloadedII.Interfaces, Version=1.14.0.0, Culture=neutral,
+			    // PublicKeyToken=null' - An item with the same key has already been added. Key: 17815670155489228776
+			    "Reloaded.Hooks.ReloadedII.Interfaces",
 			];
 
 			{{utility_namespace}}.set_push_parameter(&PushParameter);
@@ -281,8 +284,8 @@ namespace {{mod_id}}
                     {
                         var Namespace = Reloaded2Interfaces.ContainsKey(Type) ? "riri_mod_tools_rt" : null;
                         var TypePath = CreateTypePath(Type, Namespace);
-                        // _logger!.WriteLineAsync($"TODO: Register '{Type.FullName!}' as 0x{TypeHash:x}");
-                        Types.TryAdd(TypePath.ToXxh3(), new(Type));
+                        var TypeHash = TypePath.ToXxh3();
+                        Types.TryAdd(TypeHash, new(Type));
                     }
                 }
                 catch (Exception ex)
@@ -487,12 +490,115 @@ namespace {{mod_id}}
             return nint.Zero;
         }
         {{/if}}
+        {{#if cached_signatures}}
+
+        #nullable enable
+
+        private static byte[]? CachedSignature = null;
+
+        private static BinaryWriter? RegenWriter = null;
+
+        internal struct RegenSigEntry(ulong pattern, ulong offset)
+        {
+            internal ulong Pattern = pattern;
+            internal ulong Offset = offset;
+        }
+
+        private static List<RegenSigEntry> RegenSigs = new();
+
+        // private static List<Action<nuint>> CacheSigCallbacks = new();
+        private static Action CacheSigCallbacks = () => { };
+
+        #nullable disable
+
+        private static bool TryCheckSignatureCache()
+        {
+            // signature_cache binary format:
+            // All strings are xxh3 hashed
+            // u64 ExecutableHash
+            // u32 Version
+            // u32 ModCount
+            // ModData[ModCount]:
+            //      u64 ModId;
+            //      u64 ModVer;
+            // u64 SignatureCount
+            // SigData[SignatureCount]
+            //      u64 SigHash;
+            //      u64 Address;
+            try
+            {
+                var CachePath = Path.Join(_modLoader!.GetDirectoryForModId(_modConfig!.ModId), "signature_cache");
+                using (var Reader = new BinaryReader(new FileStream(CachePath, FileMode.Open, FileAccess.Read)))
+                {
+                    CachedSignature = new byte[Reader.BaseStream.Length];
+                    Reader.Read(CachedSignature, 0, (int)Reader.BaseStream.Length);
+                }
+                using (var Reader = new BinaryReader(new MemoryStream(CachedSignature)))
+                {
+                    _ = Reader.ReadUInt64(); // Executable hash
+                    _ = Reader.ReadUInt32(); // Version
+                    var CurrModList = _modLoader!.GetActiveMods().Select(tup => tup.Generic).ToList();
+                    var CacheModCount = (int)Reader.ReadUInt32();
+                    if (
+                        CurrModList.Count != CacheModCount ||
+                        CurrModList.Any(Mod => Mod.ModId.ToXxh3() != Reader.ReadUInt64() || Mod.ModVersion.ToXxh3() != Reader.ReadUInt64()))
+                        return false;
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                _logger!.WriteLineAsync("{{mod_name}}: Signature cache does not exist yet, generating...");
+                return false;
+            }
+            catch (IOException ex)
+            {
+                _logger!.WriteLineAsync($"{{mod_name}}: An error occurred while reading signature_cache: '{ex.Message}', regenerating...");
+                return false;
+            }
+
+            return true;
+        }
+
+        private static void CheckSignatureCache()
+        {
+            if (TryCheckSignatureCache()) return;
+            // Have to regenerate
+            CachedSignature = null;
+            var CachePath = Path.Join(_modLoader!.GetDirectoryForModId(_modConfig!.ModId), "signature_cache");
+            RegenWriter = new BinaryWriter(new FileStream(CachePath, FileMode.Create, FileAccess.Write));
+            var CurrModList = _modLoader!.GetActiveMods().Select(tup => tup.Generic).ToList();
+            RegenWriter.Write(metaphor.multiplayer.ReloadedFFI.Utilities.get_executable_hash());
+            RegenWriter.Write(0);
+            RegenWriter.Write((uint)CurrModList.Count);
+            foreach (var Mod in CurrModList)
+            {
+                RegenWriter.Write(Mod.ModId.ToXxh3());
+                RegenWriter.Write(Mod.ModVersion.ToXxh3());
+            }
+        }
+
+        private static void FinishSignatureCache()
+        {
+            CacheSigCallbacks();
+            if (RegenWriter != null)
+            {
+                RegenWriter.Write((ulong)RegenSigs.Count);
+                foreach (var Entry in RegenSigs)
+                {
+                    RegenWriter.Write(Entry.Pattern);
+                    RegenWriter.Write(Entry.Offset);
+                }
+                RegenWriter.Flush();
+                RegenWriter.Close();
+                RegenWriter = null;
+            }
+        }
+
+        {{/if}}
     }
-    {{#if csharp_function_invoke}}
     public static class TypeExtensions
     {
         public static ulong ToXxh3(this string Value)
             => XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(Value));
     }
-    {{/if}}
 }

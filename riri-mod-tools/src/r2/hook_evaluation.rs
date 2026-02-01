@@ -354,9 +354,8 @@ where P: AsRef<Path>
             let mut add_ending_brace = true;
             for (i, hook_entry) in hook_parm.0.iter().enumerate() {
                 match &hook_entry.0 {
-                    riri_mod_tools_impl::hook_parse::HookConditional::None 
-                    => panic!("None is not supported in multi hooks"),
-                    riri_mod_tools_impl::hook_parse::HookConditional::HashNamed(s)
+                    HookConditional::None => panic!("None is not supported in multi hooks"),
+                    HookConditional::HashNamed(s)
                     => {
                         hook_assign.push_str(&if i == 0 { 
                             self.generate_conditional_first_string(s)
@@ -364,7 +363,7 @@ where P: AsRef<Path>
                             self.generate_conditional_string(s) 
                         });
                     },
-                    riri_mod_tools_impl::hook_parse::HookConditional::HashNum(v)
+                    HookConditional::HashNum(v)
                     => {
                         hook_assign.push_str(&if i == 0 { 
                             self.generate_conditional_first_int(*v) 
@@ -372,7 +371,7 @@ where P: AsRef<Path>
                             self.generate_conditional_int(*v) 
                         });
                     },
-                    riri_mod_tools_impl::hook_parse::HookConditional::Default
+                    HookConditional::Default
                     => {
                         if i > 0 { 
                             hook_assign.push_str(&self.generate_conditional_default());
@@ -527,12 +526,12 @@ where P: AsRef<Path>
                     let mut delegate_type = "delegate* unmanaged[Stdcall]<".to_owned();
                     for input in &f.sig.inputs {
                         if let syn::FnArg::Typed(t) = input {
-                            delegate_type.push_str(&format!("{}, ", Utils::to_csharp_typename(&t.ty)?));
+                            delegate_type.push_str(&format!("{}, ", Utils::to_csharp_typename(&t.ty, self.pointers_are_untyped)?));
                         }
                     }
                     match &f.sig.output {
                         syn::ReturnType::Default => delegate_type.push_str("void"),
-                        syn::ReturnType::Type(_, t) => delegate_type.push_str(&Utils::to_csharp_typename(&t)?)
+                        syn::ReturnType::Type(_, t) => delegate_type.push_str(&Utils::to_csharp_typename(&t, self.pointers_are_untyped)?)
                     };
                     delegate_type.push_str(">");
                     let class_data = HookBootstrapFunctionState::new(fn_name, delegate_path);
@@ -573,18 +572,16 @@ where P: AsRef<Path>
                 syn::Item::Static(s) => {
                     let static_name = s.ident.to_string();
                     let hook_parm = match ffi.eval.params.get(&static_name) {
-                        Some(v) => v,
-                        None => continue
+                        Some(v) => v, None => continue
                     };
-                    let inner_type = match crate::utils::generic_type_get_inner(&s.ty)? {
+                    let inner_type = match utils::generic_type_get_inner(&s.ty)? {
                         Some(t) => t,
                         None => return Err(Box::new(MacroParseError("No generic argument was found".to_owned())))
                     };
                     let static_builder = HookBootstrapStaticState::new(
-                        riri_mod_tools_impl::csharp::Utils::to_csharp_typename(&inner_type)?, 
-                        static_name
+                        Utils::to_csharp_typename(&inner_type, self.pointers_are_untyped)?, static_name
                     );
-                    if let riri_mod_tools_impl::riri_hook::SourceFileEvaluationType::CFunction(hook_parm) = &hook_parm {
+                    if let SourceFileEvaluationType::CFunction(hook_parm) = &hook_parm {
                         if hook_parm.0.len() == 1 {
                             hook_assign.push_str(&self.generate_hook_entry_block_static(
                                 ffi, &static_builder, &hook_parm.0[0].1)?);
@@ -631,7 +628,7 @@ where P: AsRef<Path>
             };
         }
 
-        let mut out = crate::utils::SourceWriter::new();
+        let mut out = utils::SourceWriter::new();
         out.writeln("// These hook definitions were automatically generated.");
         out.fmtln(format_args!("// DO NOT EDIT THIS. It will get overwritten if you rebuild {}!", self.package.Name))?;
         out.writeln("#nullable enable");
@@ -757,6 +754,7 @@ where P: AsRef<Path>
         data.insert("logger_color".to_owned(), toml::Value::String(logger_color));
         data.insert("uses_shared_scans".to_owned(), toml::Value::Boolean(self.uses_shared_scans));
         data.insert("csharp_function_invoke".to_owned(), toml::Value::Boolean(self.use_csharp_invocation));
+        data.insert("cached_signatures".to_owned(), toml::Value::Boolean(self.use_cached_signatures));
         data.insert("utility_namespace".to_owned(), toml::Value::String(self.ffi_utility_class()));
         data.insert("ffi_namespace".to_owned(), toml::Value::String(self.ffi_namespace()));
         data.insert("exports_interfaces".to_owned(), toml::Value::Boolean(false));

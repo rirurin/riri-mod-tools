@@ -37,15 +37,49 @@ namespace {{mod_id}}
 
 	    public void SigScan(string pattern, string name, Action<nuint> hookerCb)
 	    {
-	        _startupScanner.AddMainModuleScan(pattern, result => 
-	        {
-	            if (!result.Found)
+	        {{#if cached_signatures}}
+            if (CachedSignature != null)
+            {
+                using var Reader = new BinaryReader(new MemoryStream(CachedSignature));
+                Reader.BaseStream.Seek(0xc, SeekOrigin.Begin); // ModCount
+                var ModCount = Reader.ReadUInt32();
+                Reader.BaseStream.Seek(0x10 * ModCount, SeekOrigin.Current);
+                var SigCount = Reader.ReadUInt64();
+                for (ulong i = 0; i < SigCount; i++)
+                {
+                    var (Hash, Offset) = (Reader.ReadUInt64(), Reader.ReadUInt64());
+                    if (pattern.ToXxh3() == Hash)
+                    {
+                        CacheSigCallbacks += () => hookerCb((nuint)Offset);
+                        return;
+                    }
+                }
+                _logger!.WriteLineAsync($"Couldn't find location for {name}, stuff will break :(", Color.Red);
+            }
+            else
+            {
+                _startupScanner.AddMainModuleScan(pattern, result =>
+                {
+                    if (!result.Found)
+                    {
+                        _logger!.WriteLineAsync($"Couldn't find location for {name}, stuff will break :(", Color.Red);
+                        return;
+                    }
+                    RegenSigs.Add(new RegenSigEntry(pattern.ToXxh3(), (ulong)result.Offset));
+                    hookerCb((nuint)result.Offset);
+                });
+            }
+	        {{else}}
+            _startupScanner.AddMainModuleScan(pattern, result =>
+            {
+                if (!result.Found)
                    {
                        _logger!.WriteLineAsync($"Couldn't find location for {name}, stuff will break :(", Color.Red);
                        return;
                    }
                    hookerCb((nuint)result.Offset);
-	        });
+            });
+	        {{/if}}
 	    }
 
 	    private IControllerType GetDependency<IControllerType>(string modName) where IControllerType : class
@@ -75,6 +109,9 @@ namespace {{mod_id}}
 	        _sharedScans = GetDependency<ISharedScans>("Shared Scans");
 	        {{/if}}
 	        {{utility_namespace}}.set_current_process();
+	        {{#if cached_signatures}}
+	        CheckSignatureCache();
+	        {{/if}}
 	        RegisterLogger();
 			RegisterModLoaderAPI();
 	        // Register hooks
@@ -92,6 +129,10 @@ namespace {{mod_id}}
 			{{#each loader_init_fn}}
 	        {{this}}();
 	        {{/each}}
+
+	        {{#if cached_signatures}}
+	        FinishSignatureCache();
+	        {{/if}}
 
 			_modLoader!.OnModLoaderInitialized -= OnLoaderInit;
 			_modLoader!.ModLoading -= OnModLoading;

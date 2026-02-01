@@ -30,7 +30,9 @@ pub struct HookEvaluator<'a, P: AsRef<Path>> {
     pub(crate) mod_hook_declarations: String,
     pub(crate) mod_hook_set: String,
     pub(crate) uses_shared_scans: bool,
-    pub(crate) use_csharp_invocation: bool
+    pub(crate) use_csharp_invocation: bool,
+    pub(crate) pointers_are_untyped: bool,
+    pub(crate) use_cached_signatures: bool,
 }
 
 impl<'a, P> HookEvaluator<'a, P>
@@ -55,7 +57,9 @@ where P: AsRef<Path>
             mod_hook_declarations: String::new(),
             mod_hook_set: String::new(),
             uses_shared_scans: false,
-            use_csharp_invocation: package.UseCsharpInvocation.map_or(false, |v| v)
+            use_csharp_invocation: package.UseCsharpInvocation.map_or(false, |v| v),
+            pointers_are_untyped: package.PointersAreUntyped.map_or(true, |v| v),
+            use_cached_signatures: package.UseCachedSignatures.map_or(false, |v| v),
         })
     }
 }

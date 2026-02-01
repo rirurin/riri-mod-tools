@@ -59,15 +59,17 @@ impl Utils {
     pub fn is_primitive_type(ty: &str) -> bool {
         ty != Self::convert_type_name(ty)
     }
+
+    fn convert_type_to_pointer(ty: &syn::Type) -> syn::Result<String> {
+        let mut ty = Self::to_csharp_typename(ty, true)?;
+        ty.push_str("*");
+        Ok(ty)
+    }
+
     // Loosely based on to_csharp_string from csbindgen
     // https://github.com/Cysharp/csbindgen/blob/main/csbindgen/src/type_meta.rs
-    pub fn to_csharp_typename(ty: &syn::Type) -> syn::Result<String> {
+    pub fn to_csharp_typename(ty: &syn::Type, pointers_are_untyped: bool) -> syn::Result<String> {
         match ty {
-            syn::Type::Array(a) => {
-                let mut ty = Self::to_csharp_typename(a.elem.borrow())?;
-                ty.push_str("*");
-                Ok(ty)
-            },
             syn::Type::Path(p) => {
                 let rs_name = p.path
                     .get_ident().unwrap().to_string();
@@ -78,11 +80,19 @@ impl Utils {
                     Ok(rs_name)
                 }
             },
-            syn::Type::Ptr(p) => {
-                let mut ty = Self::to_csharp_typename(p.elem.borrow())?;
-                ty.push_str("*");
-                Ok(ty)
+            syn::Type::Array(a) => {
+                match pointers_are_untyped {
+                    true => Ok("nint".to_string()),
+                    false => Self::convert_type_to_pointer(a.elem.borrow())
+                }
             },
+            syn::Type::Ptr(p) => {
+                match pointers_are_untyped {
+                    true => Ok("nint".to_string()),
+                    false => Self::convert_type_to_pointer(p.elem.borrow())
+                }
+            },
+            syn::Type::Reference(_) => Ok("nint".to_string()),
             _ => Err(syn::Error::new(ty.span(), "Unimplemented CSharp type conversion"))
         }
     }

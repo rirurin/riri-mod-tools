@@ -122,6 +122,8 @@ pub mod reloaded3ririext {
         pub R2Dependencies: Vec<R2Dependency>, // NOT IN SPEC
         pub HookSettings: ExtHookSettings, // NOT IN SPEC
         pub UseCsharpInvocation: Option<bool>, // NOT IN SPEC
+        pub PointersAreUntyped: Option<bool>, // NOT IN SPEC
+        pub UseCachedSignatures: Option<bool>, // NOT IN SPEC
     }
 
     pub const PACKAGE_FILENAME: &'static str = "package.toml";
