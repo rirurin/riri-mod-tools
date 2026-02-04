@@ -2,15 +2,15 @@
   "ModId": "riri.modruntime","ModName": "Riri Mod Runtime","ModAuthor": "Rirurin","ModVersion": "0.3.0","ModDescription": "Common utilities for Reloaded-II Rust mods","ModDll": "riri.modruntime.dll","ModIcon": "Icon.png","ModR2RManagedDll32": "x86/riri.modruntime.dll","ModR2RManagedDll64": "x64/riri.modruntime.dll","ModNativeDll32": "","ModNativeDll64": "","PluginData": {
     "GithubDependencies": {
       "IdToConfigMap": {
-        "Reloaded.Memory.SigScan.ReloadedII": {
-          "Config": {
-            "UserName": "Reloaded-Project","RepositoryName": "Reloaded.Memory.SigScan","UseReleaseTag": false,"AssetFileName": "Mod.zip"
-          },"ReleaseMetadataName": "Reloaded.Memory.SigScan.ReloadedII.ReleaseMetadata.json"
-        },
         "reloaded.sharedlib.hooks": {
           "Config": {
             "UserName": "Sewer56","RepositoryName": "Reloaded.SharedLib.Hooks.ReloadedII","UseReleaseTag": false,"AssetFileName": "reloaded.sharedlib.hooks.zip"
           },"ReleaseMetadataName": "reloaded.sharedlib.hooks.ReleaseMetadata.json"
+        },
+        "Reloaded.Memory.SigScan.ReloadedII": {
+          "Config": {
+            "UserName": "Reloaded-Project","RepositoryName": "Reloaded.Memory.SigScan","UseReleaseTag": false,"AssetFileName": "Mod.zip"
+          },"ReleaseMetadataName": "Reloaded.Memory.SigScan.ReloadedII.ReleaseMetadata.json"
         }
       }
     },"GithubRelease": {

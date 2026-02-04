@@ -13,15 +13,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 {{/if}}
 using System.Drawing;
-{{#if csharp_function_invoke}}
 using System.IO.Hashing;
+{{#if csharp_function_invoke}}
 using System.Reflection;
 {{/if}}
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-{{#if csharp_function_invoke}}
 using System.Text;
-{{/if}}
 
 namespace {{ffi_namespace}} 
 {
@@ -567,7 +565,7 @@ namespace {{mod_id}}
             var CachePath = Path.Join(_modLoader!.GetDirectoryForModId(_modConfig!.ModId), "signature_cache");
             RegenWriter = new BinaryWriter(new FileStream(CachePath, FileMode.Create, FileAccess.Write));
             var CurrModList = _modLoader!.GetActiveMods().Select(tup => tup.Generic).ToList();
-            RegenWriter.Write(metaphor.multiplayer.ReloadedFFI.Utilities.get_executable_hash());
+            RegenWriter.Write({{utility_namespace}}.get_executable_hash());
             RegenWriter.Write(0);
             RegenWriter.Write((uint)CurrModList.Count);
             foreach (var Mod in CurrModList)

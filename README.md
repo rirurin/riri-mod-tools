@@ -43,6 +43,8 @@ DocsFile = "index.html"
 Tags = [ "deharcoding" ]
 IsDependency = true
 ClientSide = false
+UseCsharpInvocation = true # (Optional) Allows use of auto-generated bindings to C# Reloaded-II interfaces (see riri_mod_tools_rt::reloaded::mod::interfaces)
+UseCachedSignatures = true # (Optional) Caches signatures so sigscanning isn't required as long as the executable and the order and version of active mods remain the same.
 
 Icon = "icon.jxl" # Reloaded3 icon, not used
 Reloaded2Icon = "Icon.png" # The icon that is used
@@ -94,6 +96,12 @@ HookLibrary = "Reloaded2CSharpHooks"
 DefaultCallingConvention = "Microsoft"
 ```
 
+### Mod Runtime
+
+For Reloaded mods, this library should be used with the `reloaded` feature enabled, which will assume a Reloaded-II runtime. **Riri Mod Runtime** (`riri_mod_runtime_reloaded`) is a mod dependency that provides a cached Xxh3 hash of the unmodified executable and stores a list of all type names obtained from RTTI.
+
+This library can be also be used without `reloaded` if you want to use the crate's logger features on a regular Rust crate.
+
 ## Function Hooks
 
 Reloaded function hooks can be fully defined within Rust, where the hook payload is the function that the definition is attached to. An example is shown below:
@@ -126,7 +134,8 @@ The syntax consists of `riri_hook_fn` or `riri_hook_static` to denote the type o
 
 ### `static_offset`
 
-`static_offset` uses a fixed address relative to the beginning of the executable (e.g `riri_hook_fn(static_offset(0x147c470))`). `dynamic_offset` should always be used instead.
+`static_offset` uses a fixed address relative to the beginning of the executable (e.g `riri_hook_fn(static_offset(0x147c470))`). 
+This method only exists for testing. In practice, `dynamic_offset` should always be used instead since it can find a sequence of bytes anywhere within the executable, which makes it resistant against updates which will move code around.
 
 ### `dynamic_offset`
 
@@ -290,12 +299,105 @@ _saveDataLoadByFileWorkerWaitForServer_ASM = _hooks!.CreateAsmHook(function, (lo
 
 ## Process Info
 
-[TODO]
+A struct that provides methods for extracting certain info from the game's executable. The ProcessInfo for the game can be retrieved using `ProcessInfo::get_current_process`.
+
+The most useful methods are listed below:
+
+#### `change_protection`
+
+Sets the protection for a segment of memory to the specified `PageProtection` bitflag value. \
+The following enables read, write and execute to write a custom short `jmp`:
+
+```rust
+let jmp_patch: [u8; 2] = [0xeb, dist];
+let mut process = ProcessInfo::get_current_process().unwrap();
+process.change_protection(std::slice::from_raw_parts(addr.as_ptr(), 2), PageProtection::all());
+std::ptr::copy_nonoverlapping(jmp_patch.as_ptr(), addr.as_ptr(), 2);
+```
+
+On Windows, PageProtection is converted into the equivalent [Win32's memory protection constant](https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants) and used on [VirtualProtectEx](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotectex). \
+On Linux, [mprotect](https://man7.org/linux/man-pages/man2/mprotect.2.html) is called. PageProtection's bitflag matches `prot`'s bitflag layout.
+
+*Note: Before 0.3.0, `change_protection_raw` was used instead which directly called the Windows implementation. `change_protection` should be used instead for Linux support.*
+
+#### `get_executable_address`
+
+Gets the base address for the game's executable.
+
+On Windows, this is the value of `HMODULE`. On Linux, this is obtained from `dl_phdr_info.base_address`
+
+#### `get_executable_size`
+
+Gets the size of the game's executable.
+
+On Windows, this is obtained from `MODULEINFO.SizeOfImage`. On Linux, this is obtained from the largest `p_vaddr + p_memsz` in the executable's memory section.
+
+#### `get_executable_hash`
+
+Gets the Xxh3 hash for the game's executable. This method is only functional on Windows with the `reloaded` feature, which will call `get_executable_hash_ex` from `riri_mod_runtime_reloaded`.\
+This is useful in cases where a certain game version requires different parameters when doing operations such as memory patching.
 
 ## VTable Utilities
 
-[TODO]
+Provides functions for interacting with C++ vtables which are exposed to RTTI. This currently only works with MSVC compiled games.
+
+#### `get_vtable`
+
+Get the address to the start of the vtable from the given name. \
+The following gets the address for `app::msg::Manager::Message`:
+
+```rust
+let message_vtable = riri_mod_tools_rt::vtable::get_vtable("Message@Manager@msg@app@@");
+```
+
+If the vtable could not be found, the address will be null.
+
+#### `get_vtable_with_offset`
+
+`get_vtable` but with an offset to get a specific function. (e.g `get_vtable_with_offset("name", 2)` will get the third function in the vtable). \
+There is no bounds checking, it's assumed that you know how long the vtable for a particular class is.
+
+#### `replace_vtable_method`
+
+Writes a custom function into the vtable at the specified method index. \
+If you intend on calling the original function, store the pointer to the original function using your callback in `handle_original`.
+
+The following is an example of a function hook onto `tick` in `app::ui::TitleLayout`'s vtable which calls the original function:
+
+```rust
+
+#[riri_mods_loaded_fn]
+fn hook_existing_game_ui_components() {
+    // layout draw methods
+    riri_mod_tools_rt::vtable::replace_vtable_method("TitleLayout@ui@app@@", 2, |f| {
+        TitleLayout::set_tick_function(unsafe { std::mem::transmute::<_, extern "C" fn(&mut TitleLayout)>(f) });
+    }, TitleLayout::tick as usize);
+    // ...
+}
+
+// ...
+
+static ORIGINAL_TITLE_LAYOUT_TICK: OnceLock<extern "C" fn(&mut TitleLayout)> = OnceLock::new();
+
+// ...
+
+impl TitleLayout {
+    pub fn set_tick_function(func: extern "C" fn(&mut TitleLayout)) {
+        let _ = ORIGINAL_TITLE_LAYOUT_TICK.set(func);
+    }
+
+    pub fn tick(&mut self) {
+        // get project stream (title_menu.ssbp)
+        if let Some(proj) = self.get_menu_mut().get_base_pane_mut().get_player_mut().get_project_data_mut() {
+            // ...
+        }
+        ORIGINAL_TITLE_LAYOUT_TICK.get().unwrap()(self);
+    }
+}
+```
 
 ## Interop with C# Types
 
-[TODO]
+If `UseCsharpInvocation` is true in `package.toml`, the mod's auto-generated C# code will include structures to allow for the creation of basic C# types, the retrieval of certain Reloaded singletons and the invocation of methods associated with those given types.
+
+For now, only a few select methods are available in `reloaded::mod::interfaces` from the IModConfig interface for getting the mod's name, author and version. In future releases, this will be expanded to include more methods.

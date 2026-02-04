@@ -12,6 +12,7 @@ pub mod interop;
 pub mod logger;
 pub mod mod_loader_data;
 pub mod protection;
+#[cfg(feature = "reloaded")]
 pub mod reloaded {
     pub mod r#mod {
         pub mod interfaces;

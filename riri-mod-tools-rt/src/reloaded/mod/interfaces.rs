@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::ops::Deref;
 use crate::interop::{ ObjectHash, ObjectInitializable, ObjectValuable };
 use crate::system::Object;
