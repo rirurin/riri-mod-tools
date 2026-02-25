@@ -179,3 +179,10 @@ pub fn riri_mods_loaded_fn(input: TokenStream, annotated_item: TokenStream) -> T
 pub fn date_time(input: TokenStream) -> TokenStream {
     datetime::date_time_impl(input.into()).into()
 }
+
+/// Defines a function that is called for every subsequent mod that the Reloaded mod loader loads.
+/// Includes an IModConfig parameter to access the loading mod's info.
+#[proc_macro_attribute]
+pub fn riri_mod_loading_fn(input: TokenStream, annotated_item: TokenStream) -> TokenStream {
+    riri_init::riri_mod_loading_fn_impl(input.into(), annotated_item.into()).into()
+}

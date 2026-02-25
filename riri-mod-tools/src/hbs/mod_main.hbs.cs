@@ -138,9 +138,12 @@ namespace {{mod_id}}
 			_modLoader!.ModLoading -= OnModLoading;
 		}
 
-		private void OnModLoading(IModV1 mod, IModConfigV1 conf)
+		private void OnModLoading(IModV1 _mod, IModConfigV1 conf)
 		{
 		    {{#if csharp_function_invoke}}
+			{{#each mod_loading_fn}}
+        	{{this}}((IModConfig)conf);
+        	{{/each}}
 		    {{utility_namespace}}.on_mod_loading(GCHandle.ToIntPtr(GCHandle.Alloc(conf)));
 		    {{/if}}
 		}

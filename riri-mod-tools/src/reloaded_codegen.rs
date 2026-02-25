@@ -83,6 +83,9 @@ impl ReloadedHookClass {
     pub fn csharp_mod_loader_init(&self) -> String {
         format!("ModLoaderInit_{:X}", self.hash)
     }
+    pub fn csharp_mod_loading(&self) -> String {
+        format!("ModLoading_{:X}", self.hash)
+    }
     pub fn csharp_class_name_static(hash: u64) -> String {
         format!("Hooks_{:X}", hash)
     }

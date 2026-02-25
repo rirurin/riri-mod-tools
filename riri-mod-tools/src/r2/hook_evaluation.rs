@@ -9,6 +9,8 @@ use crate::{
         HookAssignCodegenDynamicOffsetSharedScans,
         HookAssignCodegenUserDefined,
         InitFunction,
+        ModEventFunction,
+        ModLoadingFunction,
         SourceFileEvaluationResult,
         SourceFileEvaluationParamMapEx,
     },
@@ -85,17 +87,29 @@ impl HookSourceFile {
 #[derive(Debug)]
 pub struct HookEvaluationResult {
     register_hook_functions: Vec<String>,
-    loader_initialized_functions: Vec<String>
+    loader_initialized_functions: Vec<String>,
+    mod_loading_functions: Vec<String>
 }
 impl HookEvaluationResult {
-    pub fn new(register_hook_functions: Vec<String>, loader_initialized_functions: Vec<String>) -> Self {
-        Self { register_hook_functions, loader_initialized_functions }
+    pub fn new(
+        register_hook_functions: Vec<String>,
+        loader_initialized_functions: Vec<String>,
+        mod_loading_functions: Vec<String>
+    ) -> Self {
+        Self {
+            register_hook_functions,
+            loader_initialized_functions,
+            mod_loading_functions
+        }
     }
     pub fn get_register_hook_functions(&self) -> &[String] {
         self.register_hook_functions.as_slice()
     }
     pub fn get_loader_initialized_functions(&self) -> &[String] {
         self.loader_initialized_functions.as_slice()
+    }
+    pub fn get_mod_loading_functions(&self) -> &[String] {
+        self.mod_loading_functions.as_slice()
     }
 }
 
@@ -170,6 +184,7 @@ where P: AsRef<Path>
                     let fn_inline_attr_pos = Self::check_rust_function_for_attribute(f, "riri_hook_inline_fn", &mut fn_attr_defined)?;
                     let fn_init_pos = Self::check_rust_function_for_attribute(f, "riri_init_fn", &mut fn_attr_defined)?;
                     let fn_mods_loaded_pos = Self::check_rust_function_for_attribute(f, "riri_mods_loaded_fn", &mut fn_attr_defined)?;
+                    let fn_mod_loading_pos = Self::check_rust_function_for_attribute(f, "riri_mod_loading_fn", &mut fn_attr_defined)?;
                     if let Some(p) = fn_attr_pos {
                         let insertion = riri_mod_tools_impl::riri_hook::riri_hook_fn_build(
                             f.attrs.remove(p).meta.require_list()?.tokens.clone(),
@@ -192,6 +207,12 @@ where P: AsRef<Path>
                     }
                     if let Some(p) = fn_mods_loaded_pos {
                         let insertion = riri_mod_tools_impl::riri_init::riri_mods_loaded_fn_build(
+                            f.clone()
+                        )?;
+                        mutated_items.push((i, insertion));
+                    }
+                    if let Some(p) = fn_mod_loading_pos {
+                        let insertion = riri_mod_tools_impl::riri_init::riri_mod_loading_fn_build(
                             f.clone()
                         )?;
                         mutated_items.push((i, insertion));
@@ -221,15 +242,6 @@ where P: AsRef<Path>
                 added_items += mutated_item.1.items.len();
             }
         }
-        /* 
-        for src_item in &src_syntax.items {
-            match src_item {
-                syn::Item::Fn(f) => println!("{}", f().to_string()),
-                syn::Item::Static(f) => println!("{}", f.to_token_stream().to_string()),
-                _ => continue
-            };
-        }
-        */
         // Move name and args to evaluation result
         for mutated_item in mutated_items {
             items.insert(mutated_item.1.name, mutated_item.1.args);
@@ -511,6 +523,7 @@ where P: AsRef<Path>
         let mut hook_assign = String::new();
         let mut hook_methods = String::new();
         let mut loader_init_call = String::new();
+        let mut mod_loading = String::new();
 
         for item in &ffi.eval.file.items {
             match item {
@@ -561,10 +574,11 @@ where P: AsRef<Path>
                         SourceFileEvaluationType::InitFunction(hook_parm) => {
                             match hook_parm.get_state() {
                                 SourceFileInitializeState::ModuleLoaded => 
-                                    hook_assign.push_str(&InitFunction::make_init_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
+                                    hook_assign.push_str(&InitFunction::make_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
                                 SourceFileInitializeState::ModLoaderInitialized => 
-                                    loader_init_call.push_str(&InitFunction::make_init_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
-                                SourceFileInitializeState::ModLoaded => ()
+                                    loader_init_call.push_str(&InitFunction::make_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
+                                SourceFileInitializeState::ModLoaded =>
+                                    mod_loading.push_str(&ModLoadingFunction::make_function_call::<P>(self, ffi, &class_data, &delegate_type)?),
                             }
                         }
                     }
@@ -638,7 +652,6 @@ where P: AsRef<Path>
         out.indent()?;
         // class definitions for C-style and assmebly hook storage
         out.writeln(&hook_decl);
-
         // called when the module is initialized
         out.fmtln(format_args!("public void {}()\n", ffi.csharp_register_hooks()))?;
         out.indent()?;
@@ -649,6 +662,13 @@ where P: AsRef<Path>
         out.fmtln(format_args!("public void {}()\n", ffi.csharp_mod_loader_init()))?;
         out.indent()?;
         out.writeln(&loader_init_call);
+        if self.use_csharp_invocation {
+            out.unindent()?;
+            out.fmtln(format_args!("public void {}(Reloaded.Mod.Interfaces.IModConfig conf)\n", ffi.csharp_mod_loading()))?;
+            out.indent()?;
+            out.fmtln(format_args!("var confHandle = GCHandle.ToIntPtr(GCHandle.Alloc(conf));"))?;
+            out.writeln(&mod_loading);
+        }
         for _ in 0..3 { out.unindent()?; }
         Ok(out.submit())
     }
@@ -716,15 +736,17 @@ where P: AsRef<Path>
         // call csbindgen to generate function imports and structs
         let mut call_hook_registers = vec![];
         let mut loader_initialized_files = vec![];
+        let mut on_mod_loading_files = vec![];
         for evaluated_file in evaluated_files_full {
             call_hook_registers.push(evaluated_file.1.csharp_register_hooks());
             loader_initialized_files.push(evaluated_file.1.csharp_mod_loader_init());
+            on_mod_loading_files.push(evaluated_file.1.csharp_mod_loading());
             let cs_file = evaluated_file.1.cs_path.to_str().unwrap().to_owned();
             cb(self, evaluated_file.1)?;
             let mut cs_file = fs::OpenOptions::new().append(true).open(cs_file)?;
             cs_file.write(evaluated_file.0.as_bytes())?;
         }
-        Ok(HookEvaluationResult::new(call_hook_registers, loader_initialized_files))
+        Ok(HookEvaluationResult::new(call_hook_registers, loader_initialized_files, on_mod_loading_files))
     }
 
     pub fn generate_mod_main(&self, evaluation: HookEvaluationResult) -> Result<(), Box<dyn Error>> {
@@ -761,8 +783,10 @@ where P: AsRef<Path>
 
         let register_hook_modules = toml::Value::Array(into_toml_array(evaluation.get_register_hook_functions()));
         let mod_initialized_modules = toml::Value::Array(into_toml_array(evaluation.get_loader_initialized_functions()));
+        let mod_loading_modules = toml::Value::Array(into_toml_array(evaluation.get_mod_loading_functions()));
         data.insert("register_hook_fn".to_owned(), register_hook_modules);
         data.insert("loader_init_fn".to_owned(), mod_initialized_modules);
+        data.insert("mod_loading_fn".to_owned(), mod_loading_modules);
         mod_file.write(hbs.render("main", &data)?.as_bytes())?;
         utils_file.write(hbs.render("utils", &data)?.as_bytes())?;
         Ok(())

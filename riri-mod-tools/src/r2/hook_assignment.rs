@@ -392,6 +392,15 @@ impl<'a> HookAssignCodegenDynamicOffsetSharedScans<'a> {
 
 pub(crate) struct HookAssignCodegenMultiple(Vec<HookEntry>);
 
+pub(crate) trait ModEventFunction {
+    fn make_function_call<P: AsRef<Path>>(
+        evaluator: &HookEvaluator<P>,
+        ffi: &ReloadedHookClass,
+        class_data: &HookBootstrapFunctionState,
+        delegate_type: &str
+    ) -> Result<String, Box<dyn Error>>;
+}
+
 pub struct InitFunction;
 impl InitFunction {
     pub(crate) fn make_init_function_call<P: AsRef<Path>>(
@@ -402,6 +411,32 @@ impl InitFunction {
     ) -> Result<String, Box<dyn Error>> {
         let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
         Ok(format!("{}.{}();\n", hooks_class, class_data.get_fn_name()))
+    }
+}
+
+impl ModEventFunction for InitFunction {
+    fn make_function_call<P: AsRef<Path>>(
+        evaluator: &HookEvaluator<P>,
+        ffi: &ReloadedHookClass,
+        class_data: &HookBootstrapFunctionState,
+        delegate_type: &str
+    ) -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        Ok(format!("{}.{}();\n", hooks_class, class_data.get_fn_name()))
+    }
+}
+
+pub struct ModLoadingFunction;
+
+impl ModEventFunction for ModLoadingFunction {
+    fn make_function_call<P: AsRef<Path>>(
+        evaluator: &HookEvaluator<P>,
+        ffi: &ReloadedHookClass,
+        class_data: &HookBootstrapFunctionState,
+        delegate_type: &str
+    ) -> Result<String, Box<dyn Error>> {
+        let hooks_class = format!("{}.{}", &evaluator.ffi_hook_namespace(), &ffi.csharp_class_name());
+        Ok(format!("{}.{}(confHandle);\n", hooks_class, class_data.get_fn_name()))
     }
 }
 

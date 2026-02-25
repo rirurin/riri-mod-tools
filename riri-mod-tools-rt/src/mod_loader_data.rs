@@ -1,5 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use crate::logln;
+#[cfg(feature = "reloaded")]
 use crate::reloaded::r#mod::interfaces::IModConfig;
 use crate::system::Object;
 
