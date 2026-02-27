@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::OnceLock;
+use crate::system::Object;
 
 type SetPushParameter = unsafe extern "C" fn(u64, u64, usize);
 static PUSH_PARAMETER: OnceLock<SetPushParameter> = OnceLock::new();
@@ -192,6 +193,7 @@ pub trait ObjectValuable where Self: Sized {
 pub trait ObjectInitializable where Self: Sized {
     type InitType;
     fn new(value: Self::InitType) -> Result<Self, InteropError>;
+    unsafe fn new_unchecked(value: Object) -> Self;
 }
 
 pub trait ObjectHash where Self: Sized {

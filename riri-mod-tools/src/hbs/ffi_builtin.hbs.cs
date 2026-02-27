@@ -9,6 +9,7 @@ using Reloaded.Mod.Interfaces;
 {{/if}}
 using Reloaded.Memory.Sigscan;
 {{#if csharp_function_invoke}}
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 {{/if}}
@@ -152,6 +153,14 @@ namespace {{mod_id}}
         internal nint Len;
     }
 
+    // This must stay in sync with ArrayData in riri_mod_tools_rt::system!
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ArrayData
+    {
+        internal ulong Hash;
+        internal nint Len;
+    }
+
     internal class MethodListInitComparer : IEqualityComparer<(ulong, MethodInfo)>
     {
         public bool Equals((ulong, MethodInfo) x, (ulong, MethodInfo) y)
@@ -165,35 +174,38 @@ namespace {{mod_id}}
     {
         public MethodList(Type type)
         {
-            List<(ulong, MethodInfo)> MethodList = new();
             HashSet<Type> DistinctTypes = [];
-            var ThisType = type.Name;
             ImportMethods(type);
-            Methods = MethodList.ToDictionary();
-            Parameters = MethodList.Select(x => (x.Item1, new List<nint>())).ToDictionary();
             return;
 
             void ImportMethods(Type type)
             {
                 if (!DistinctTypes.Add(type)) return;
-                MethodList.AddRange(type.GetMethods()
-                    .Select(Method =>
-                    {
-                        var ParamHashes = Method.GetParameters().Select(x =>
+                foreach (var (Hash, Method) in (type.GetMethods()
+                        .Where(x => x.ReturnType.FullName != null
+                            && x.GetParameters().All(y => y.ParameterType.FullName != null)
+                            && !x.GetParameters().Any(y => y.IsIn || y.IsOut))
+                        .Select(Method =>
                         {
-                            var ParamType = x.ParameterType;
-                            return ParamType.FullName != null ? ParamType.FullName!.ToXxh3() : 0;
-                        });
-                        var FinalHash = Method.Name.ToXxh3();
-                        FinalHash = ParamHashes.Aggregate(FinalHash, (current, Param) => current + Param);
-                        return (FinalHash, Method);
-                    }));
+                            var ParamHashes = Method.GetParameters().Select(x =>
+                            {
+                                var ParamType = x.ParameterType;
+                                return ParamType.FullName != null ? ParamType.FullName!.ToXxh3() : ParamType.Name.ToXxh3();
+                            });
+                            var FinalHash = Method.Name.ToXxh3();
+                            FinalHash = ParamHashes.Aggregate(FinalHash, (current, Param) => current + Param);
+                            return (FinalHash, Method);
+                        })))
+                {
+                    if (Methods.TryAdd(Hash, Method))
+                        Parameters[Hash] = new();
+                }
                 foreach (var impl in type.GetInterfaces())
                     ImportMethods(impl);
             }
         }
 
-        public Dictionary<ulong, MethodInfo> Methods { get; }
+        public Dictionary<ulong, MethodInfo> Methods { get; } = [];
         public Dictionary<ulong, List<nint>> Parameters { get; } = [];
     }
     {{/if}}
@@ -281,9 +293,7 @@ namespace {{mod_id}}
                                  .Where(x => x is { IsInterface: true, IsGenericType: false, FullName: not null }))
                     {
                         var Namespace = Reloaded2Interfaces.ContainsKey(Type) ? "riri_mod_tools_rt" : null;
-                        var TypePath = CreateTypePath(Type, Namespace);
-                        var TypeHash = TypePath.ToXxh3();
-                        Types.TryAdd(TypeHash, new(Type));
+                        Types.TryAdd(CreateTypePath(Type, Namespace).ToXxh3(), new(Type));
                     }
                 }
                 catch (Exception ex)
@@ -291,6 +301,10 @@ namespace {{mod_id}}
                     _logger!.WriteLineAsync($"[{{logger_prefix}}]: Could not GetTypes on assembly '{Assembly.FullName!}' - {ex.Message}", Color.Red);
                 }
             }
+
+            // To call System.Array methods when converting into Vec<T>
+            Types.TryAdd(CreateTypePath(typeof(IEqualityComparer), null).ToXxh3(), new(typeof(IEqualityComparer)));
+            Types.TryAdd(CreateTypePath(typeof(Array), null).ToXxh3(), new(typeof(Array)));
             {{/if}}
 
             _logger!.OnWrite += (_, p) => {{utility_namespace}}.on_reloaded_logger(Marshal.StringToHGlobalUni(p.text));
@@ -336,7 +350,7 @@ namespace {{mod_id}}
     	private static List<Type> BasicTypeGenerators =
     	[
            typeof(byte), typeof(sbyte), typeof(bool), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-           typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(string)
+           typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(string), typeof(Array)
     	];
     	private static Dictionary<Type, Func<object>> Reloaded2Interfaces = new()
     	{
@@ -360,7 +374,7 @@ namespace {{mod_id}}
             var Parts = Path.Split(".");
             var RustName = string.Join("::", Parts.Select((x, i) => i != Parts.Length - 1 ? x.ToSnakeCase() : x));
             RustName = $"{overrideNamespace ?? "crate"}::{RustName}{GenericFmt}";
-            if (type.IsArray) return $"riri_mod_tools_rt::system::Array<{RustName}>";
+            if (type.IsArray) return $"crate::system::Array<{RustName}>";
             return RustName;
         }
         #nullable disable
@@ -484,6 +498,12 @@ namespace {{mod_id}}
             {
                 var stringData = (StringData*)(initializer + 1);
                 return GCHandle.ToIntPtr(GCHandle.Alloc(Marshal.PtrToStringUTF8(stringData->Ptr, (int)stringData->Len)));
+            }
+            if (Type == typeof(Array))
+            {
+                var arrayData = (ArrayData*)(initializer + 1);
+                if (!BasicTypes.TryGetValue(arrayData->Hash, out var ValueType)) return nint.Zero;
+                return GCHandle.ToIntPtr(GCHandle.Alloc(Array.CreateInstance(ValueType, (int)arrayData->Len)));
             }
             return nint.Zero;
         }

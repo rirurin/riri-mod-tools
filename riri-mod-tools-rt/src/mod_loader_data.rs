@@ -1,6 +1,9 @@
 use std::sync::{Mutex, OnceLock};
 #[cfg(feature = "reloaded")]
 use crate::reloaded::r#mod::interfaces::IModConfig;
+#[cfg(feature = "reloaded")]
+use crate::interop::ObjectInitializable;
+#[cfg(feature = "reloaded")]
 use crate::system::Object;
 
 type GetDirFn = unsafe extern "C" fn() -> *const u16;
