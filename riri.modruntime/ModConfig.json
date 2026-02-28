@@ -1,5 +1,5 @@
 {
-  "ModId": "riri.modruntime","ModName": "Riri Mod Runtime","ModAuthor": "Rirurin","ModVersion": "0.3.0","ModDescription": "Common utilities for Reloaded-II Rust mods","ModDll": "riri.modruntime.dll","ModIcon": "Icon.png","ModR2RManagedDll32": "x86/riri.modruntime.dll","ModR2RManagedDll64": "x64/riri.modruntime.dll","ModNativeDll32": "","ModNativeDll64": "","PluginData": {
+  "ModId": "riri.modruntime","ModName": "Riri Mod Runtime","ModAuthor": "Rirurin","ModVersion": "0.3.1","ModDescription": "Common utilities for Reloaded-II Rust mods","ModDll": "riri.modruntime.dll","ModIcon": "Icon.png","ModR2RManagedDll32": "x86/riri.modruntime.dll","ModR2RManagedDll64": "x64/riri.modruntime.dll","ModNativeDll32": "","ModNativeDll64": "","PluginData": {
     "GithubDependencies": {
       "IdToConfigMap": {
         "reloaded.sharedlib.hooks": {
