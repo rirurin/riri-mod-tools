@@ -6,6 +6,7 @@ use std::{
     sync::OnceLock
 };
 use std::sync::Mutex;
+#[cfg(feature = "reloaded")]
 use crate::mod_loader_data::CSharpString;
 
 /// Defines a color which can be used to set the color that a message will be printed as in the
@@ -519,9 +520,11 @@ pub unsafe extern "C" fn set_logger_color(name: *const i8) -> bool {
     }
 }
 
+#[cfg(feature = "reloaded")]
 static ON_RELOADED_LOGGER: Mutex<Vec<fn(&str)>> = Mutex::new(vec![]);
 
 #[no_mangle]
+#[cfg(feature = "reloaded")]
 pub unsafe extern "C" fn on_reloaded_logger(p: *const u16) {
     let str = CSharpString::new(p);
     let callbacks = ON_RELOADED_LOGGER.lock().unwrap();
@@ -529,13 +532,16 @@ pub unsafe extern "C" fn on_reloaded_logger(p: *const u16) {
     (&*callbacks).iter().for_each(|cb| cb(str_ref));
 }
 
+#[cfg(feature = "reloaded")]
 pub fn add_reloaded_logger_callback(cb: fn(&str)) {
    ON_RELOADED_LOGGER.lock().unwrap().push(cb);
 }
 
+#[cfg(feature = "reloaded")]
 static ON_RELOADED_LOGGER_NEWLINE: Mutex<Vec<fn(&str)>> = Mutex::new(vec![]);
 
 #[no_mangle]
+#[cfg(feature = "reloaded")]
 pub unsafe extern "C" fn on_reloaded_logger_newline(p: *const u16) {
     let str = CSharpString::new(p);
     let callbacks = ON_RELOADED_LOGGER_NEWLINE.lock().unwrap();
@@ -543,6 +549,7 @@ pub unsafe extern "C" fn on_reloaded_logger_newline(p: *const u16) {
     (&*callbacks).iter().for_each(|cb| cb(str_ref));
 }
 
+#[cfg(feature = "reloaded")]
 pub fn add_reloaded_logger_newline_callback(cb: fn(&str)) {
     ON_RELOADED_LOGGER_NEWLINE.lock().unwrap().push(cb);
 }

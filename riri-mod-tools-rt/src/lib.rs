@@ -8,16 +8,19 @@ pub mod address;
 pub mod address;
 pub mod assembly_utils;
 pub mod interleave;
-pub mod interop;
+#[cfg(feature = "reloaded")]
+pub mod interop; // For C# interop (requires Reloaded runtime)
 pub mod logger;
+#[cfg(feature = "reloaded")]
 pub mod mod_loader_data;
 pub mod protection;
 #[cfg(feature = "reloaded")]
 pub mod reloaded {
     pub mod r#mod {
-        pub mod interfaces;
+        pub mod interfaces; // namespace Reloaded.Mod.Interfaces;
     }
 }
 pub mod sigscan_resolver;
-pub mod system;
+#[cfg(feature = "reloaded")]
+pub mod system; // namespace System;
 pub mod vtable;
