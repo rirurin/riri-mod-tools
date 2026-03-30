@@ -130,6 +130,6 @@ impl Debug for MemorySection {
     }
 }
 
-pub fn get_platform_thread_id() -> u64 {
+pub fn get_thread_id() -> u64 {
     (unsafe { libc::gettid() }) as u64
 }

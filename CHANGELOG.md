@@ -1,5 +1,9 @@
 # Recent Changes
 
+## 0.3.2
+- `riri-mod-tools-rt`:
+  - Rename `get_platform_thread_id` on Linux to `get_thread_id` to fix compilation error when using `detailed_logs`
+
 ## 0.3.1
 
 - `riri-mod-tools`:
