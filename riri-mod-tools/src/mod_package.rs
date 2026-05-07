@@ -35,7 +35,8 @@ pub mod reloaded3ririext {
     #[derive(Deserialize, Debug)]
     pub struct GithubUpdateInfo {
         pub UserName: String,
-        pub RepositoryName: String
+        pub RepositoryName: String,
+        pub UseReleaseTag: Option<bool> // NOT IN SPEC, default to false
     }
 
     #[allow(non_snake_case)]
@@ -443,7 +444,7 @@ pub mod reloaded2 {
                             Config: DependencyConfig::Github(GithubDependency {
                                 UserName: d.UserName.clone(),
                                 RepositoryName: d.RepositoryName.clone(),
-                                UseReleaseTag: false,
+                                UseReleaseTag: d.UseReleaseTag.unwrap_or(false),
                                 AssetFileName: update_data.get_asset_file_name()
                             }),
                             ReleaseMetadataName: dep.get_release_metadata_name()
@@ -456,7 +457,7 @@ pub mod reloaded2 {
                     plugins.GithubRelease = Some(GithubDependency {
                         UserName: g.UserName.clone(),
                         RepositoryName: g.RepositoryName.clone(),
-                        UseReleaseTag: false,
+                        UseReleaseTag: g.UseReleaseTag.unwrap_or(false),
                         AssetFileName: d.get_asset_file_name()
                     });
                 }

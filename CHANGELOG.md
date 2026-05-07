@@ -1,6 +1,8 @@
 # Recent Changes
 
 ## 0.3.2
+- `riri-mod-tools`:
+  - Add option to use the Github release tag to denote the package version: `UseReleaseTag`. Used for Github dependencies in the package metadata.
 - `riri-mod-tools-rt`:
   - Rename `get_platform_thread_id` on Linux to `get_thread_id` to fix compilation error when using `detailed_logs`
 
